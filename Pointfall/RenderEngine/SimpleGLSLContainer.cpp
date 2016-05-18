@@ -22,11 +22,11 @@ ShaderContext	SimpleShaderContainer::_gShaderContext	= NULL;
 
 const char	*myProgramName			= "CRAP_SLAP_TRAP",
 			*gLitShaderFilename	= "__default",
-			*gBasicLitVertProgram	= "..\\media\\programs\\basicLight_v.glsl",
-			*gBasicLitFragProgram	= "..\\media\\programs\\basicLight_f.glsl",
+			*gBasicLitVertProgram	= "media\\programs\\basicLight_v.glsl",
+			*gBasicLitFragProgram	= "media\\programs\\basicLight_f.glsl",
 			*gUnlitShaderFilename	= "__unlit",
-			*gUnlitVertProgram		= "..\\media\\programs\\basicUnlit_v.glsl",
-			*gUnlitFragProgram		= "..\\media\\programs\\basicUnlit_f.glsl";
+			*gUnlitVertProgram		= "media\\programs\\basicUnlit_v.glsl",
+			*gUnlitFragProgram		= "media\\programs\\basicUnlit_f.glsl";
 
 
 
