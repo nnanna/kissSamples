@@ -1,0 +1,492 @@
+
+//////////////////////////////////////////////////////////////////////////
+///
+/// Copyright (c)
+///	@author		Nnanna Kama
+///	@date		11/01/2015
+///
+///
+/// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
+/// to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+/// and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+///
+/// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+///
+/// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+/// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+/// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//////////////////////////////////////////////////////////////////////////
+
+#define USE_STL_SORT	1	// faster for huge datasets but slower in debug mode
+
+#include "AsyncSolver.h"
+#include <Maths\ks_Maths.inl>
+#include <insertion.h>
+#include <AppLayer\Service.h>
+#include <Containers\CyclicConcurrentQueue.h>
+#include <Concurrency\JobScheduler.hpp>
+#include <Concurrency\Semaphore.h>
+#include <Concurrency\ReadWriteLock.h>
+#include <Concurrency\BitLock.h>
+#include <Memory\ThreadStackAllocator.h>
+#include <unordered_map>
+#if USE_STL_SORT
+#include <algorithm>
+#endif
+
+namespace ks {
+
+	using namespace mem;
+
+	struct DistanceIndex		// the next best thing to space partitioning
+	{
+		float distance;
+		ksU32 index;
+
+		inline bool operator< (const DistanceIndex& other) const	{ return distance < other.distance; }
+		inline bool operator> (const DistanceIndex& other) const	{ return distance > other.distance; }
+	};
+
+	struct LocalSolver
+	{
+		static LocalSolver* Acquire(void* pClientAddress)
+		{
+			static ReadWriteLock sRWLock;
+			static std::unordered_map<size_t, LocalSolver*> sLocalSolverMap;
+
+			size_t key = size_t(pClientAddress);
+			
+			auto rGuard = sRWLock.Read();
+			auto itr = sLocalSolverMap.find(key);
+			if (itr == sLocalSolverMap.end())
+			{
+				rGuard.Release();
+				auto wGuard = sRWLock.Write();
+				sLocalSolverMap[key] = new LocalSolver();		// mem leak @TODO
+				itr = sLocalSolverMap.find(key);
+			}
+
+			return itr->second;
+		}
+
+		void reset()
+		{
+			mVelocities = mPositions = nullptr;
+			mIndex = mCapacity = mRevision = 0;
+		}
+
+		void init(StackBuffer& stack, size_t pNumElements)
+		{
+			mVelocities			= (vec3*)stack.allocate(pNumElements * sizeof(vec3));
+			mPositions			= (vec3*)stack.allocate(pNumElements * sizeof(vec3));
+			mSortedDistances	= (DistanceIndex*)stack.allocate(pNumElements * sizeof(DistanceIndex));
+
+			mCapacity			= pNumElements;
+		}
+
+		bool in_progress() const	{ return reading() || solving(); }
+
+		bool reading() const		{ return mCapacity > 0 && mIndex < mCapacity; }
+
+		bool solving() const		{ return mIndex != 0; }
+
+		ksU32 capacity() const		{ return mCapacity; }
+
+		void asyncQuerySort()
+		{
+			DistanceIndex dist;
+			while ( reading() )
+			{
+				if (mIndex == mRevision)
+				{
+					THREAD_SWITCH;
+				}
+				else
+				{
+					while (mIndex < mRevision )
+					{
+						dist.distance	= mPositions[ mIndex ].LengthSq();
+						dist.index		= mIndex;
+#if USE_STL_SORT
+						mSortedDistances[mIndex] = dist;
+#else
+						binary_insert_sorted( mSortedDistances, mIndex, dist, descending_sort_predicate<DistanceIndex>() );
+#endif
+						++mIndex;
+					}
+				}
+			}
+#if USE_STL_SORT
+			std::sort(mSortedDistances, mSortedDistances + mIndex, ascending_sort_predicate<DistanceIndex>());
+#endif
+		}
+
+		ksU32 resolveCollisions(vec3* pResults, float elapsed)
+		{
+#define COLLISION_RADIUS_SQ				0.2f		// hardcode for now. @TODO
+#define MAX_PER_ENTITY_COLLISIONS		2
+			ksU32 num_collisions(0);
+			DistanceIndex di, dk;
+			vec3 impulse_v, norm;
+			for (ksU32 i = 0, k = 1; k < mCapacity; ++i, ++k)
+			{
+				di = *(mSortedDistances + i);
+				dk = *(mSortedDistances + k);
+
+				while ( (di.distance - dk.distance) <= COLLISION_RADIUS_SQ )	// don't need no fabs(), descending order sorted
+				{
+					norm = mPositions[di.index] - mPositions[dk.index];
+					if (norm.LengthSq() <= COLLISION_RADIUS_SQ)
+					{
+						norm.FastNormalize();
+
+						impulse_v	= -norm;
+						impulse_v	*= norm.Dot( mVelocities[dk.index] - mVelocities[di.index] );
+						impulse_v	/= COLLISION_RADIUS_SQ;			// just because
+
+						accumulate( pResults, di.index, -impulse_v );
+						accumulate( pResults, dk.index,  impulse_v );
+						++num_collisions;
+					}
+
+					if (++k >= mCapacity || k - i > MAX_PER_ENTITY_COLLISIONS)
+						break;
+
+					dk = *(mSortedDistances + k);
+				}
+				k = i + 1;
+			}
+
+			return num_collisions;
+		}
+
+		void accumulate(vec3* pResults, ksU32 index, const vec3& val)
+		{
+			mResultsGuard.Lock128(index);
+			pResults[ index ] += val;
+			mResultsGuard.Unlock128(index);
+		}
+
+		static ksU32 AllocSize( ksU32 pNumElements )
+		{
+			return pNumElements * ( (sizeof(vec3) * 2) + sizeof(DistanceIndex) );
+		}
+
+		BitLock			mResultsGuard;
+		DistanceIndex*	mSortedDistances;
+		vec3*			mPositions;
+		vec3*			mVelocities;
+		ksU32			mRevision;
+		Semaphore		IdleWatch;
+	private:
+		LocalSolver() : mVelocities(nullptr), mPositions(nullptr), mRevision(0), mCapacity(0), mIndex(0)
+		{}
+		LocalSolver(const LocalSolver&) = delete;
+		LocalSolver& operator=(const LocalSolver&) = delete;
+		ksU32 mCapacity;
+		ksU32 mIndex;
+	};
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// async_context
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	async_context::async_context(LocalSolver& pSolver) : mSolver(pSolver)
+	{}
+
+	void async_context::SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel)
+	{
+		while (mSolver.capacity() == 0)
+		{
+			THREAD_SWITCH;			// wait for solver workspace to be allocated
+		}
+
+		mSolver.mPositions[pResultIndex]	= pPos;
+		mSolver.mVelocities[pResultIndex]	= pVel;
+		++mSolver.mRevision;
+	}
+
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// Global Solver
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	struct GlobalSolver
+	{
+#define SOLVER_MEM_CAPACITY						5 * MEGABYTE
+
+		StackBuffer FrameBuffer(ksU32 pCapacity)
+		{
+			int index(-1);
+			{
+				auto wGuard = mRWLock.Write();
+				if ((SOLVER_MEM_CAPACITY - mSize) > pCapacity)
+				{
+					index = mSize;
+					mSize += pCapacity;
+				}
+			}
+
+			StackBuffer b(nullptr, 0);
+			if (index >= 0)
+			{
+				b = StackBuffer(mBuffer + index, pCapacity);
+				atomic_increment(&mMemClients);
+			}
+			else
+			{
+				KS_ASSERT(!"Out of memory");
+			}
+
+			return b;
+		}
+
+		void Release(StackBuffer& pBuffer)
+		{
+			atomic_decrement(&mMemClients);
+		}
+
+		void Reset()							{ mSize = 0; mQueries.clear(); }
+
+		void Submit(LocalSolver& pLS, vec3* pResults, float elapsed)
+		{
+			memset(pResults, 0, (pLS.capacity() * sizeof(vec3)));
+			local_query lq =
+			{
+				pResults,
+				pLS.mPositions,
+				pLS.mVelocities,
+				pLS.mSortedDistances,
+				pLS.capacity(),
+				&pLS
+			};
+
+			ksU32 numQueries = atomic_increment(&mNumQueries);
+			{
+				auto wGuard = mRWLock.Write();
+				mQueries.push_back(lq);
+			}
+
+			if (numQueries == 2)
+			{
+				Service<JobScheduler>::Get()->QueueJob(
+					[this, elapsed]() -> ksU32
+					{
+						return resolveInterQueryCollisions( elapsed );
+					},
+					"GlobalSolver");
+			}
+		}
+
+		void AwaitCompletion()
+		{
+			if (mCompletionMarker)
+			{
+				while (mMemClients != 0 || mNumQueries > 1)
+				{
+					if (mNumQueries > 1)
+						mCompleted.wait();
+					else
+						THREAD_SWITCH;
+				}
+				Reset();
+
+				atomic_and(&mCompletionMarker, 0);
+			}
+		}
+
+		void BeginBatch()
+		{
+			//AwaitCompletion();	// best to delay sync till new local queries are ready -> in AwaitQueryCompletion()
+		}
+
+		void EndBatch()
+		{
+			mCompletionMarker = true;
+		}
+
+
+		static GlobalSolver& Get()
+		{
+			static GlobalSolver	sGlobalSolver;
+			return sGlobalSolver;
+		}
+
+	private:
+		struct local_query
+		{
+			vec3*			results;
+			vec3*			positions;
+			vec3*			velocities;
+			DistanceIndex*	sortedDistance;
+			ksU32			capacity;
+			LocalSolver*	local_solver;
+		};
+
+		GlobalSolver() : mSize(0), mMemClients(0)
+		{
+			mBuffer			= new char[ SOLVER_MEM_CAPACITY ];
+			mQueries.reserve(16);
+		}
+
+		~GlobalSolver()
+		{
+			delete[] mBuffer;
+		}
+
+		ksU32 resolveInterQueryCollisions(float elapsed)
+		{
+#define G_COLLISION_RADIUS_SQ		1.2f
+#define G_MAX_PER_ENTITY_COLLISIONS	2
+#define G_MAX_TOTAL_COLLISIONS		8000
+#define G_IMPULSE_FACTOR			0.2f
+			vec3 norm, impulse_v;
+			ksU32 total_collisions(0);
+
+			for (ksU32 i = 0; i + 1 < mNumQueries; ++i)
+			{
+				local_query qi;
+				{
+					auto rGuard = mRWLock.Read();
+					qi = mQueries[i];
+				}
+				int iindex = qi.capacity;
+				for (ksU32 j = i + 1; j < mNumQueries; ++j)
+				{
+					local_query qj;
+					{
+						auto rGuard = mRWLock.Read();
+						qj = mQueries[j];
+					}
+
+					while (iindex-- > 0 && total_collisions < G_MAX_TOTAL_COLLISIONS)
+					{
+						struct lbound_distance_pred
+						{
+							lbound_distance_pred(const DistanceIndex& pCtx) : mCtx(pCtx)
+							{}
+
+							inline bool operator()(const DistanceIndex& p) const
+							{
+								return p.distance > mCtx.distance - G_COLLISION_RADIUS_SQ;
+							}
+							const DistanceIndex& mCtx;
+						};
+						int jindex = ks::binary_find(qj.sortedDistance, qj.capacity, lbound_distance_pred(qi.sortedDistance[iindex]));
+						++jindex;	// so we can straight-up decrement it in the while loop.
+						ksU32 j_collisions(0);
+						float dist(0.f);
+						while (--jindex >= 0 && dist < G_COLLISION_RADIUS_SQ && j_collisions < G_MAX_PER_ENTITY_COLLISIONS)
+						{
+							dist = qi.sortedDistance[iindex].distance - qj.sortedDistance[jindex].distance;
+							dist = dist < 0.f ? -dist : dist;
+							if (dist < G_COLLISION_RADIUS_SQ)
+							{
+								const ksU32 i = qi.sortedDistance[iindex].index;
+								const ksU32 j = qj.sortedDistance[jindex].index;
+								norm = qi.positions[i] - qj.positions[j];
+								if (norm.LengthSq() < G_COLLISION_RADIUS_SQ)
+								{
+									norm.FastNormalize();
+
+									impulse_v = -norm;
+									impulse_v *= norm.Dot(qj.velocities[j] - qi.velocities[i]);
+									impulse_v /= G_IMPULSE_FACTOR;		// exaggerate
+
+									qi.local_solver->accumulate( qi.results, i, -impulse_v );
+									qj.local_solver->accumulate( qj.results, j,  impulse_v );
+
+									++j_collisions;
+									++total_collisions;
+								}
+							}
+						}
+					}
+				}
+			}
+			atomic_and(&mNumQueries, 0);
+			mCompleted.signal();
+
+			//printf("inter collisions: %d\n", total_collisions);
+			return total_collisions;
+		}
+
+		ReadWriteLock		mRWLock;
+		char*				mBuffer;
+		ksU32				mSize;
+		ksU32				mMemClients;
+		ksU32				mNumQueries;
+		bool				mCompletionMarker;
+		Array<local_query>	mQueries;
+		Semaphore			mCompleted;
+	};
+
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// CollisionSolver
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	async_context CollisionSolver::BeginAsync(Array<vec3>& pForceResults, ksU32 pNumElements, float elapsed)
+	{
+		LocalSolver& ls		= *LocalSolver::Acquire( &pForceResults );
+
+		KS_ASSERT(pNumElements <= pForceResults.size());
+
+		auto solver = [&pForceResults, &ls, pNumElements, elapsed]() -> ksU32
+		{
+			auto& gSolver		= GlobalSolver::Get();
+			StackBuffer stack	= gSolver.FrameBuffer( LocalSolver::AllocSize(pNumElements) );
+			ls.init(stack, pNumElements);
+
+			ls.asyncQuerySort();
+
+			gSolver.Submit(ls, pForceResults.data(), elapsed);
+
+			ksU32 numCollisions = ls.resolveCollisions(pForceResults.data(), elapsed);
+
+			gSolver.Release(stack);
+
+			return numCollisions;
+		};
+
+		auto on_complete = [ &ls ](ksU32 num_collisions)
+		{
+			/*if(num_collisions > 0)
+			{
+				DEBUG_PRINT("local_collisions : %d\n", num_collisions);
+			}*/
+			KS_ASSERT(ls.reading() == false);
+			ls.reset();
+			ls.IdleWatch.signal();
+		};
+
+		AwaitQueryCompletion( ls );
+
+		Service<JobScheduler>::Get()->QueueJob(solver, on_complete, "CollisionSolver");
+
+		return async_context( ls );
+	}
+
+	void CollisionSolver::AwaitQueryCompletion(Array<vec3>& pForceResults)
+	{
+		LocalSolver& ls = *LocalSolver::Acquire(&pForceResults);
+		AwaitQueryCompletion( ls );
+	}
+
+	void CollisionSolver::AwaitQueryCompletion(LocalSolver& pSolver)
+	{
+		while (pSolver.in_progress())
+			pSolver.IdleWatch.wait();
+
+		GlobalSolver::Get().AwaitCompletion();
+	}
+
+	void CollisionSolver::BeginBatch()
+	{
+		GlobalSolver::Get().BeginBatch();
+	}
+
+	void CollisionSolver::EndBatch()
+	{
+		GlobalSolver::Get().EndBatch();
+	}
+}

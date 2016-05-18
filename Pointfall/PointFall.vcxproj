@@ -1,0 +1,147 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{7F5D570D-F342-498B-B7E1-DB0FFD17C652}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>kiss</RootNamespace>
+    <ProjectName>PointFall</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v120</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <ExecutablePath>.dlls;$(ExecutablePath)</ExecutablePath>
+    <EnableManagedIncrementalBuild>true</EnableManagedIncrementalBuild>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;GLEW_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);externals\include\;..\..\kissFramework\;..\..\kissFramework\Containers\;..\..\kissFramework\Common\;.\Common\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>.\Lib;$(SolutionDir)$(Configuration)\</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glut32.lib;glew32s.lib;kissFramework.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <Profile>true</Profile>
+    </Link>
+    <PostBuildEvent>
+      <Command>copy .\dlls\*.dll $(SolutionDir)$(Configuration)\</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>
+      </PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;GLEW_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);externals\include\;..\..\kissFramework\;..\..\kissFramework\Containers\;..\..\kissFramework\Common\;.\Common\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalLibraryDirectories>.\Lib;$(SolutionDir)$(Configuration)\</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glut32.lib;glew32s.lib;kissFramework.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <Profile>true</Profile>
+    </Link>
+    <PostBuildEvent>
+      <Command>copy .\dlls\*.dll $(SolutionDir)$(Configuration)\</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="AppLayer\GLApplication.cpp" />
+    <ClCompile Include="AppLayer\InputListener.cpp" />
+    <ClCompile Include="AssetLoader\kissModel.cpp" />
+    <ClCompile Include="FX\Particles.cpp" />
+    <ClCompile Include="FX\ParticleSystem.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Physics\AsyncSolver.cpp" />
+    <ClCompile Include="Physics\Constraint.cpp" />
+    <ClCompile Include="RenderEngine\Material.cpp" />
+    <ClCompile Include="RenderEngine\SimpleCgContainer.cpp" />
+    <ClCompile Include="RenderEngine\GLRenderer.cpp" />
+    <ClCompile Include="RenderEngine\SimpleGLSLContainer.cpp" />
+    <ClCompile Include="RenderEngine\RenderResourceFactory.cpp" />
+    <ClCompile Include="RenderEngine\RenderTarget.cpp" />
+    <ClCompile Include="SceneManagement\Camera.cpp" />
+    <ClCompile Include="SceneManagement\SceneObject.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AppLayer\GLApplication.h" />
+    <ClInclude Include="AppLayer\InputListener.h" />
+    <ClInclude Include="AppLayer\Service.h" />
+    <ClInclude Include="AssetLoader\kissModel.h" />
+    <ClInclude Include="AssetLoader\rgbe.h" />
+    <ClInclude Include="Common\insertion.h" />
+    <ClInclude Include="Common\Macros.h" />
+    <ClInclude Include="FX\Particles.h" />
+    <ClInclude Include="FX\ParticleSystem.h" />
+    <ClInclude Include="Physics\AsyncSolver.h" />
+    <ClInclude Include="Physics\Constraint.h" />
+    <ClInclude Include="RenderEngine\GLRenderer.h" />
+    <ClInclude Include="RenderEngine\Light.h" />
+    <ClInclude Include="RenderEngine\Material.h" />
+    <ClInclude Include="RenderEngine\RenderData.h" />
+    <ClInclude Include="RenderEngine\SimpleShaderContainer.h" />
+    <ClInclude Include="RenderEngine\RenderResourceFactory.h" />
+    <ClInclude Include="RenderEngine\RenderTarget.h" />
+    <ClInclude Include="SceneManagement\Camera.h" />
+    <ClInclude Include="SceneManagement\SceneObject.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="media\programs\basicLight_f.glsl" />
+    <None Include="media\programs\basicLight_v.glsl" />
+    <None Include="media\programs\basicUnlit_f.glsl" />
+    <None Include="media\programs\basicUnlit_v.glsl" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -1,0 +1,20 @@
+//
+// simplest. shader. ever.
+//
+
+void fresnel_vp(float4				position	: POSITION,
+                float3				normal		: NORMAL,
+				out float4			outPos		: POSITION,
+				uniform float4x4	viewProj
+              )
+{
+	// to homogenous screen space
+    outPos = mul(viewProj, position);
+	outPos.xyz = float3(0.4, 0.5, 0);
+	outPos.w = 1;
+}
+
+float4 fresnel_fp() : COLOR
+{
+    return float4(1.0, 0.0, 0.0, 1.0);
+}

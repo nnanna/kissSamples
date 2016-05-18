@@ -1,0 +1,77 @@
+// object shaders
+//
+// Author: Simon Green
+// Email: sdkfeedback@nvidia.com
+//
+// Copyright (c) NVIDIA Corporation. All rights reserved.
+
+// application to vertex shader
+struct a2v 
+{
+    float4 Position : POSITION;
+    float4 Normal   : NORMAL;
+};
+
+// vertex shader to fragment shader
+struct v2f 
+{
+    float4 HPosition : POSITION;
+    float4 P         : TEXCOORD0; // position
+    float3 N         : TEXCOORD1; // normal
+    float3 I         : TEXCOORD2; // incident vector
+};
+
+v2f object_vp(a2v In,
+              uniform float4x4 viewProj : state.matrix.mvp,
+              uniform float4x4 model,
+              uniform float3 eyePos
+              )
+{
+    v2f Out;
+
+    // transform position to world space
+    float4 P = mul(model, In.Position);
+
+    // transform normal to world space
+    float3 N = mul((float3x3) model, In.Normal.xyz);
+    N = normalize(N);
+
+    // calculate incident vector
+    float3 I = P.xyz - eyePos;
+
+    Out.P = P;
+    Out.N = N;
+    Out.I = I;
+
+    Out.HPosition = mul(viewProj, P);
+    return Out;
+}
+
+// fresnel approximation
+half my_fresnel(half3 I, half3 N, half power, half scale, half bias)
+{
+    return bias + (pow(clamp(1.0 - dot(I, N), 0.0, 1.0), power) * scale);
+}
+
+float4 object_fp(v2f In,
+                uniform samplerCUBE envMap
+                ) : COLOR
+{
+    float3 I = normalize(In.I);
+    float3 N = normalize(In.N);
+
+    float3 R = reflect(I, N);
+    float3 T = refract(I, N, 0.95);
+    float fresnel = my_fresnel(-I, N, 5.0, 0.99, 0.01);
+
+    float3 Creflect = texCUBE(envMap, R).rgb; // lookup reflection in HDR cube map
+    float3 Crefract = texCUBE(envMap, T).rgb; // refraction
+    Crefract *= float3(0.05, 0.2, 0.05);
+
+//    float3 Cout = lerp(Crefract, Creflect, fresnel);
+    float3 Cout = lerp(Crefract, Creflect, 0.02);
+
+//    return float4(Creflect, 1.0);
+    return float4(Cout, 0.5);
+//    return fresnel;
+}

@@ -1,0 +1,689 @@
+/*********************************************************************NVMH3****
+Path:  NVSDK\Common\media\programs
+File:  fixed_function.cg
+
+Copyright 2003 by NVIDIA Corporation
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THIS SOFTWARE IS PROVIDED
+*AS IS* AND NVIDIA AND ITS SUPPLIERS DISCLAIM ALL WARRANTIES, EITHER EXPRESS
+OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS FOR A PARTICULAR PURPOSE.  IN NO EVENT SHALL NVIDIA OR ITS SUPPLIERS
+BE LIABLE FOR ANY SPECIAL, INCIDENTAL, INDIRECT, OR CONSEQUENTIAL DAMAGES
+WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR LOSS OF BUSINESS PROFITS,
+BUSINESS INTERRUPTION, LOSS OF BUSINESS INFORMATION, OR ANY OTHER PECUNIARY LOSS)
+ARISING OUT OF THE USE OF OR INABILITY TO USE THIS SOFTWARE, EVEN IF NVIDIA HAS
+BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+
+******************************************************************************/
+
+//======================================================================
+//======================================================================
+//======================================================================
+//
+//                  fixed_function.cg
+// A cg program demonstrating the fixed function OpenGL pipeline
+//
+//  This file defines the connectors and functional components
+//    that can be combined to produce the same transform, lighting,
+//    and texturing available from the fixed function pipeline
+//
+//======================================================================
+//======================================================================
+//======================================================================
+
+//======================================================================
+//======================================================================
+//                       Connectors                                     
+//
+//  The connectors used in this example are simplified versions of those
+//  provided by the Cg Standard Library.
+//======================================================================
+//======================================================================
+
+//======================================================================
+//                                                 Application -> Vertex
+// Vertex Programs inputs, 
+//
+// Define inputs from application
+//  although your texture coordinates may only be 2D it is still
+//  safe to use 4 vectors here
+//======================================================================
+
+struct appin
+{
+	float4 VPos    : POSITION;       // model space vertex position 
+	float4 VWeight : BLENDWEIGHT;    // weights for skinning (u,1-u)
+	float4 Norm    : NORMAL;         // model space vertex normal
+	float4 PCol    : COLOR0;         // primary color (diffuse)
+	float4 SCol    : COLOR1;         // seconary color (specular)
+	float4 PSize   : PSIZE0;         // point size
+	float4 Tex0    : TEXCOORD0;      // texture coordinate set 0
+	float4 Tex1    : TEXCOORD1;      // texture coordinate set 1
+	float4 Tex2    : TEXCOORD2;      // texture coordinate set 2
+	float4 Tex3    : TEXCOORD3;      // texture coordinate set 3
+};
+
+//======================================================================
+//                                                    Vertex -> Fragment
+// Define outputs from vertex shader
+//======================================================================
+
+struct vertout
+{
+	float4 HPos    : POSITION;      // homogeneous clip space postion
+	float4 PCol    : COLOR0;        // primary (diffuse) color
+	float4 SCol    : COLOR1;        // secondary (specular) color
+	float  Fog     : FOG;           // fog factor
+	float  PSize   : PSIZE;         // point size
+	float4 Tex0    : TEXCOORD0;     // texture coordinate set 0
+	float4 Tex1    : TEXCOORD1;     // texture coordinate set 1
+	float4 Tex2    : TEXCOORD2;     // texture coordinate set 2
+	float4 Tex3    : TEXCOORD3;     // texture coordinate set 3
+};
+
+//======================================================================
+//  Uniform GL inputs
+//    These map the "standard" gl state for our vertex programs
+//======================================================================
+
+// GL Matricies, bound to constant registers for tracking
+struct cgglMatrix{
+	uniform float4x4 ModelViewProj :C0; //Projection * Modelview matrix
+	uniform float4x4 ModelViewIT   :C4; //Modelview inverse transform
+	uniform float4x4 ModelView     :C8; //Modelview matrix
+};
+
+// GL Material
+struct cgglMaterial{
+	uniform float4   DiffMat;       //Diffuse material
+	uniform float4   SpecMat;       //Specular material
+	uniform float4   AmbMat;        //Ambient material
+	uniform float4   ShineMat;      //Shininess material, specular power
+	uniform float4   EmisMat;       //Emissive material
+};
+
+// GL Lights
+struct cgglLight{
+	uniform float4   LightVec;      //Light direction
+	uniform float4   LightPos;      //Light position
+	uniform float4   DiffLight;     //Diffuse light
+	uniform float4   SpecLight;     //Specular light
+	uniform float4   AmbLight;      //Ambient light
+	uniform float3   AttenLight;    //the attenuation terms: constant, linear, quadradic
+	uniform float2   SpotLight;     //spot light parameters: cos(spot cuttoff angle), spot power
+};
+
+// GL Texture transforms
+struct cgglTexture{
+	uniform float4   TexPlaneX;    //Texture planes for texture 0
+	uniform float4   TexPlaneY;
+	uniform float4   TexPlaneZ;
+	uniform float4   TexPlaneW;
+	uniform float4x4 TexMatrix;    //Texture matrix for texture 0
+	uniform float4x4 TexIMV;       //Texture inverse modelview for eye-linear texgen mode
+};
+
+//======================================================================
+//======================================================================
+//                       Function defintions:
+//
+//    While these functions can be called directly, they were designed
+//     only to serve as examples, as they may not produce the most
+//    optimal vertex programs.
+//======================================================================
+//======================================================================
+
+
+//======================================================================
+//                        Lighting
+//======================================================================
+
+//======================================================================
+//   Point light and local viewer shading model
+//======================================================================
+
+float4 light_point_view_local(float3 epos,         //the eye space vertex position
+							  float3 norm,         //the vertex normal
+							  cgglLight    lt,     //the light
+							  cgglMaterial mat)    //the material
+{
+	
+	float3 vert2light = lt.LightPos.xyz - epos;  //vector from vertex to the light
+	float d = length(vert2light);         //distance between the two, need this for attenuation
+	float3 ldir = vert2light/d;           //light direction
+	float3 vdir = normalize(-epos);       //view direction, redundent for multiple lights
+	float3 halfv = normalize(ldir + vdir); //halfway vector
+	
+	// Compute the diffuse and specular coefficients
+	//  the diffuse cosine is in coeffs.y, the specular is in coeffs.z
+	float4 coeffs = lit(dot(norm,ldir), dot(norm,halfv), mat.ShineMat.x);
+	
+	// Compute the standard shading model
+	float4 outCol = 1/(lt.AttenLight.x + d*lt.AttenLight.y + d*d*lt.AttenLight.z) *   //attenuation term
+		                 (lt.AmbLight*mat.AmbMat +                       //ambient term
+				  lt.DiffLight*mat.DiffMat*coeffs.y +            //diffuse term
+				  lt.SpecLight*mat.SpecMat*coeffs.z);            //specular term
+	
+	return outCol;	
+}
+
+//======================================================================
+//   Spot light and local viewer shading model
+//======================================================================
+
+float4 light_spot_view_local(float3 epos,         //the eye space vertex position
+							 float3 norm,         //the vertex normal
+							 cgglLight    lt,
+							 cgglMaterial mat)
+{
+	
+	float3 vert2light = lt.LightPos.xyz - epos;  //vector from vertex to the light
+	float d = length(vert2light);         //distance between the two, need this for attenuation
+	float3 ldir = vert2light/d;           //light direction
+	float3 vdir = normalize(-epos);       //view direction, redundent for multiple lights
+	float3 half = normalize(ldir + vdir); //halfway vector
+	
+	// Compute the diffuse and specular coefficients
+	float4 coeffs = lit(dot(norm,ldir), dot(norm,half), mat.ShineMat.x);
+	
+	// Compute spotlight effect
+	float3 lightDir = normalize(lt.LightVec.xyz);
+	float spotDot = dot(ldir, -lightDir);
+	float4 spot  = lit(spotDot - lt.SpotLight.x, spotDot, lt.SpotLight.y);
+	
+	// Compute the standard shading model
+	float4 outCol = 1/(lt.AttenLight.x + d*lt.AttenLight.y + d*d*lt.AttenLight.z) *   //attenuation term
+		                 (lt.AmbLight*mat.AmbMat +                       //ambient term
+				  lt.DiffLight*mat.DiffMat*coeffs.y +            //diffuse term
+				  lt.SpecLight*mat.SpecMat*coeffs.z);            //specular term
+	
+	return outCol;	
+}
+
+
+//======================================================================
+//   Directional light and local viewer shading model
+//======================================================================
+
+float4 light_directional_view_local(float3 epos,         //the eye space vertex position
+									float3 norm,         //the vertex normal
+									cgglLight    lt,     //the light
+									cgglMaterial mat)    //the material
+{
+	float3 vdir = normalize(-epos);
+	float3 lightDir = normalize(lt.LightVec.xyz);
+	float3 half = normalize(vdir - lightDir);
+	
+	float4 coeffs = lit(dot(norm, - lightDir), dot(norm,half),mat.ShineMat.x);
+	
+	// Compute the standard shading model
+	float4 outCol = lt.AmbLight*mat.AmbMat +               //ambient term
+		lt.DiffLight*mat.DiffMat*coeffs.y +            //diffuse term
+		lt.SpecLight*mat.SpecMat*coeffs.z;             //specular term
+	return outCol;
+}
+
+//======================================================================
+//   Directional light and infinite viewer shading model
+//======================================================================
+
+float4 light_directional_view_inf(float3 norm,         //the vertex normal
+								  cgglLight lt,
+								  cgglMaterial mat)
+{
+	float3 lightDir = normalize(lt.LightVec.xyz);
+	
+	float3 vdir = {0,0,1};
+	float3 half = normalize(vdir - lightDir);
+	
+	float4 coeffs = lit(dot(norm, - lightDir), dot(norm,half),mat.ShineMat.x);
+	
+	// Compute the standard shading model
+	float4 outCol = lt.AmbLight*mat.AmbMat +               //ambient term
+		lt.DiffLight*mat.DiffMat*coeffs.y +            //diffuse term
+		lt.SpecLight*mat.SpecMat*coeffs.z;             //specular term
+	return outCol;
+}
+
+//======================================================================
+//   A trimed down point light, not part of the standard OGL pipeline
+//======================================================================
+
+float4 light_simple_point(float3 epos,
+						  float3 norm,
+						  float3 lightPos,
+						  float4 materialColor,
+						  float4 ambientColor,
+						  float4 lightColor,
+						  float  specPower)
+{
+	float3 vdir = {0,0,1};
+	float3 ldir = normalize(lightPos - epos);
+	float3 half = normalize(vdir + ldir);
+	float4 coeffs = lit(dot(norm, ldir), dot(norm, half), specPower);
+	
+	float4 outCol = ambientColor + 
+		materialColor*lightColor*coeffs.y +
+		lightColor*coeffs.z;
+	return outCol;
+	
+}
+
+
+//======================================================================
+//                       Texture Generation
+//======================================================================
+
+//======================================================================
+//  Object linear texture generation
+//======================================================================
+
+float4 texgen_object(float4   vpos,      //object space vertex position
+					 cgglTexture tex)
+{
+	float4 tcoord;
+	
+	//create texcoord based on texture planes                   
+	tcoord.x = dot(vpos, tex.TexPlaneX);    
+	tcoord.y = dot(vpos, tex.TexPlaneY);
+	tcoord.z = dot(vpos, tex.TexPlaneZ);
+	tcoord.w = dot(vpos, tex.TexPlaneW);
+	
+	//multiply by texture matrix
+	tcoord = mul(tex.TexMatrix, tcoord); 
+	
+	return tcoord; 
+}
+
+//======================================================================
+//  Eye linear texture generation
+//    Texgen for eye space requires the inverse model view present
+//    when glTexGen is invoked.  It may be more efficient to include
+//    this matrix in the texture matrix.  
+//======================================================================
+
+float4 texgen_eye(float4   epos,      // eye space vertex position
+				  cgglTexture tex)
+{
+	float4 temp;
+	float4 tcoord;
+	
+	//multiply by inverse model view for the texgen 
+	temp = mul(tex.TexIMV, epos);
+	
+	//create texcoord based on texture planes                   
+	tcoord.x = dot(temp, tex.TexPlaneX);    
+	tcoord.y = dot(temp, tex.TexPlaneY);
+	tcoord.z = dot(temp, tex.TexPlaneZ);
+	tcoord.w = dot(temp, tex.TexPlaneW);
+	
+	
+	//multiply by texture matrix
+	tcoord = mul(tex.TexMatrix, tcoord); 
+	
+	return tcoord; 
+}
+
+//======================================================================
+//   Sphere Map texture generation
+//======================================================================
+
+float4 texgen_sphere(float4 epos, 
+					 float3 norm,
+					 cgglTexture tex)
+{
+	float3 vdir = normalize(epos.xyz);
+	
+	float3 ref = reflect(vdir, norm);
+	
+	float3 em = ref + float3(0,0,1);
+	em.x = 2 * sqrt(dot(em, em));
+	
+	float4 tcoord = {0,0,0,1};
+	
+	tcoord.xy = ref.xy/em.x + .5;
+	
+	return tcoord;
+}
+
+//======================================================================
+//======================================================================
+//======================================================================
+//                   Shaders
+//======================================================================
+//======================================================================
+//======================================================================
+
+
+//======================================================================
+//======================================================================
+//======================================================================
+//  The "main_point_local" entry point function
+//    Shows rendering with a Point light source and a local viewer
+//======================================================================
+//======================================================================
+//======================================================================
+
+vertout main_point_local(appin IN,
+						 uniform cgglMatrix mx,
+						 uniform cgglMaterial mat,
+						 uniform cgglLight lt,
+						 uniform cgglTexture tex)
+{
+	vertout OUT;  // You must create a "vertex2fragment" structure 
+	
+	//------------------------------------------------------------
+	// First, set the homogeneous eye-space position of the vertex
+	// and compute the eye-space position for lighting etc..
+	//------------------------------------------------------------
+	OUT.HPos    = mul(mx.ModelViewProj, IN.VPos);  //The homogeneous vertex position
+	float4 EPos = mul(mx.ModelView, IN.VPos);      //The eye-space vertex position
+	
+	//------------------------------------------------------------
+	// Transform the normal from object-space to eye-space
+	//    We will do all of our lighting in eye-space
+	//------------------------------------------------------------
+	float3 normal = normalize( mul( (float3x3)mx.ModelViewIT, IN.Norm.xyz ) );
+	
+	OUT.Tex0 = IN.Tex0;
+	OUT.Tex1 = IN.Tex1;
+	OUT.Tex2 = IN.Tex2;
+	OUT.Tex3 = IN.Tex3;
+	
+	// Call the light                      eye      normal light material
+	float4 color = light_point_view_local(EPos.xyz, normal, lt,    mat);
+	
+	OUT.PCol = color + mat.EmisMat;  //be sure to add the emissive color separate from the light
+	
+	return OUT;
+}
+
+//======================================================================
+//======================================================================
+//======================================================================
+//  The "main_spot_local" entry point function
+//    Shows rendering with a Spotlight and a local viewer
+//======================================================================
+//======================================================================
+//======================================================================
+
+vertout main_spot_local(appin IN,
+						uniform cgglMatrix mx,
+						uniform cgglMaterial mat,
+						uniform cgglLight lt,
+						uniform cgglTexture tex)
+{
+	vertout OUT;  // You must create a "vertex2fragment" structure 
+	
+	//------------------------------------------------------------
+	// First, set the homogeneous eye-space position of the vertex
+	// and compute the eye-space position for lighting etc..
+	//------------------------------------------------------------
+	OUT.HPos    = mul(mx.ModelViewProj, IN.VPos);  //The homogeneous vertex position
+	float4 EPos = mul(mx.ModelView, IN.VPos);      //The eye-space vertex position
+	
+	//------------------------------------------------------------
+	// Transform the normal from object-space to eye-space
+	//    We will do all of our lighting in eye-space
+	//------------------------------------------------------------
+	float3 normal = normalize( mul( (float3x3)mx.ModelViewIT, IN.Norm.xyz ) );
+	
+	OUT.Tex0 = IN.Tex0;
+	OUT.Tex1 = IN.Tex1;
+	OUT.Tex2 = IN.Tex2;
+	OUT.Tex3 = IN.Tex3;
+	
+	float4 color = light_spot_view_local(EPos.xyz, normal, lt, mat);    
+	
+	OUT.PCol = color + mat.EmisMat; //be sure to add the emissive color separate from the light  
+	
+	return OUT;
+}
+
+//======================================================================
+//======================================================================
+//======================================================================
+//  The "main_directional_local" entry point function
+//    Shows rendering with a Directional light and a local viewer
+//======================================================================
+//======================================================================
+//======================================================================
+
+vertout main_directional_local(appin IN,
+							   uniform cgglMatrix mx,
+							   uniform cgglMaterial mat,
+							   uniform cgglLight lt,
+							   uniform cgglTexture tex)
+{
+	vertout OUT;  // You must create a "vertex2fragment" structure 
+	
+	//------------------------------------------------------------
+	// First, set the homogeneous eye-space position of the vertex
+	// and compute the eye-space position for lighting etc..
+	//------------------------------------------------------------
+	OUT.HPos    = mul(mx.ModelViewProj, IN.VPos);  //The homogeneous vertex position
+	float4 EPos = mul(mx.ModelView, IN.VPos);      //The eye-space vertex position
+	
+	//------------------------------------------------------------
+	// Transform the normal from object-space to eye-space
+	//    We will do all of our lighting in eye-space
+	//------------------------------------------------------------
+	float3 normal = normalize( mul( (float3x3)mx.ModelViewIT, IN.Norm.xyz ) );
+	
+	OUT.Tex0 = IN.Tex0;
+	OUT.Tex1 = IN.Tex1;
+	OUT.Tex2 = IN.Tex2;
+	OUT.Tex3 = IN.Tex3;
+	
+	float4 color = light_directional_view_local(EPos.xyz, normal, lt, mat);
+	
+	OUT.PCol = color + mat.EmisMat;
+	
+	return OUT;
+}
+
+//======================================================================
+//======================================================================
+//======================================================================
+//  The "main_directional_inf" entry point function
+//    Shows rendering with a Directional light and a infinite viewer
+//======================================================================
+//======================================================================
+//======================================================================
+
+vertout main_directional_inf(appin IN,
+							 uniform cgglMatrix mx,
+							 uniform cgglMaterial mat,
+							 uniform cgglLight lt,
+							 uniform cgglTexture tex)
+{
+	vertout OUT;  // You must create a "vertex2fragment" structure 
+
+	//------------------------------------------------------------
+	// First, set the homogeneous eye-space position of the vertex
+	// and compute the eye-space position for lighting etc..
+	//------------------------------------------------------------
+	OUT.HPos    = mul(mx.ModelViewProj, IN.VPos);  //The homogeneous vertex position
+	
+	//------------------------------------------------------------
+	// Transform the normal from object-space to eye-space
+	//    We will do all of our lighting in eye-space
+	//------------------------------------------------------------
+	float3 normal = normalize( mul( (float3x3)mx.ModelViewIT, IN.Norm.xyz ) );
+	
+	OUT.Tex0 = IN.Tex0;
+	OUT.Tex1 = IN.Tex1;
+	OUT.Tex2 = IN.Tex2;
+	OUT.Tex3 = IN.Tex3;
+	
+	float4 color = light_directional_view_inf(normal, lt, mat);
+	
+	OUT.PCol = color + mat.EmisMat;
+	
+	return OUT;
+}
+
+//======================================================================
+//======================================================================
+//======================================================================
+//  The "main_simple_point" entry point function
+//    Shows rendering with a Simplified point light
+//======================================================================
+//======================================================================
+//======================================================================
+
+vertout main_simple_point(appin IN,
+						  uniform cgglMatrix mx,
+						  uniform cgglMaterial mat,
+						  uniform cgglLight lt,
+						  uniform cgglTexture tex)
+{
+	vertout OUT;  // You must create a "vertex2fragment" structure 
+	
+	//------------------------------------------------------------
+	// First, set the homogeneous eye-space position of the vertex
+	// and compute the eye-space position for lighting etc..
+	//------------------------------------------------------------
+	OUT.HPos    = mul(mx.ModelViewProj, IN.VPos);  //The homogeneous vertex position
+	float4 EPos = mul(mx.ModelView, IN.VPos);      //The eye-space vertex position
+	
+	//------------------------------------------------------------
+	// Transform the normal from object-space to eye-space
+	//    We will do all of our lighting in eye-space
+	//------------------------------------------------------------
+	float3 normal = normalize( mul( (float3x3)mx.ModelViewIT, IN.Norm.xyz ) );
+	
+	OUT.Tex0 = IN.Tex0;
+	OUT.Tex1 = IN.Tex1;
+	OUT.Tex2 = IN.Tex2;
+	OUT.Tex3 = IN.Tex3;
+	
+	OUT.PCol = light_simple_point(EPos.xyz, normal, lt.LightPos.xyz, 
+		IN.PCol, mat.AmbMat,  lt.DiffLight, mat.ShineMat.x);    
+	
+	return OUT;
+}
+
+//======================================================================
+//======================================================================
+//======================================================================
+//  The "main_texgen_eye" entry point function
+//    Shows rendering with eye-linear
+//======================================================================
+//======================================================================
+//======================================================================
+
+vertout main_texgen_eye(appin IN,
+						uniform cgglMatrix mx,
+						uniform cgglMaterial mat,
+						uniform cgglLight lt,
+						uniform cgglTexture tex)
+{
+	vertout OUT;  // You must create a "vertex2fragment" structure 
+	
+	//------------------------------------------------------------
+	// First, set the homogeneous eye-space position of the vertex
+	// and compute the eye-space position for lighting etc..
+	//------------------------------------------------------------
+	OUT.HPos    = mul(mx.ModelViewProj, IN.VPos);  //The homogeneous vertex position
+	float4 EPos = mul(mx.ModelView, IN.VPos);      //The eye-space vertex position
+	
+	//------------------------------------------------------------
+	// Transform the normal from object-space to eye-space
+	//    We will do all of our lighting in eye-space
+	//------------------------------------------------------------
+	float3 normal = normalize( mul( (float3x3)mx.ModelViewIT, IN.Norm.xyz ) );
+	
+	OUT.Tex0 = texgen_eye(EPos, tex);
+	OUT.Tex1 = IN.Tex1;
+	OUT.Tex2 = IN.Tex2;
+	OUT.Tex3 = IN.Tex3;
+	
+	OUT.PCol = light_simple_point(EPos.xyz, normal, lt.LightPos.xyz, 
+		IN.PCol, mat.AmbMat,  lt.DiffLight, mat.ShineMat.x);    
+	
+	return OUT;
+}
+
+//======================================================================
+//======================================================================
+//======================================================================
+//  The "main_texgen_object" entry point function
+//    Shows rendering with object-linear texture generation
+//======================================================================
+//======================================================================
+//======================================================================
+
+vertout main_texgen_object(appin IN,
+						   uniform cgglMatrix mx,
+						   uniform cgglMaterial mat,
+						   uniform cgglLight lt,
+						   uniform cgglTexture tex)
+{
+	vertout OUT;  // You must create a "vertex2fragment" structure 
+	
+	//------------------------------------------------------------
+	// First, set the homogeneous eye-space position of the vertex
+	// and compute the eye-space position for lighting etc..
+	//------------------------------------------------------------
+	OUT.HPos    = mul(mx.ModelViewProj, IN.VPos);  //The homogeneous vertex position
+	float4 EPos = mul(mx.ModelView, IN.VPos);      //The eye-space vertex position
+	
+	//------------------------------------------------------------
+	// Transform the normal from object-space to eye-space
+	//    We will do all of our lighting in eye-space
+	//------------------------------------------------------------
+	float3 normal = normalize( mul( (float3x3)mx.ModelViewIT, IN.Norm.xyz ) );
+	
+	OUT.Tex0 = texgen_object(IN.VPos, tex);
+	OUT.Tex1 = IN.Tex1;
+	OUT.Tex2 = IN.Tex2;
+	OUT.Tex3 = IN.Tex3;
+	
+	OUT.PCol = light_simple_point(EPos.xyz, normal, lt.LightPos.xyz, 
+		IN.PCol, mat.AmbMat,  lt.DiffLight, mat.ShineMat.x);    
+	
+	return OUT;
+}
+
+//======================================================================
+//======================================================================
+//======================================================================
+//  The "main_texgen_sphere" entry point function
+//    Shows rendering with object-linear texture generation
+//======================================================================
+//======================================================================
+//======================================================================
+
+vertout main_texgen_sphere(appin IN,
+						   uniform cgglMatrix mx,
+						   uniform cgglMaterial mat,
+						   uniform cgglLight lt,
+						   uniform cgglTexture tex)
+{
+	vertout OUT;  // You must create a "vertex2fragment" structure 
+	
+	//------------------------------------------------------------
+	// First, set the homogeneous eye-space position of the vertex
+	// and compute the eye-space position for lighting etc..
+	//------------------------------------------------------------
+	OUT.HPos    = mul(mx.ModelViewProj, IN.VPos);  //The homogeneous vertex position
+	float4 EPos = mul(mx.ModelView, IN.VPos);      //The eye-space vertex position
+	
+	//------------------------------------------------------------
+	// Transform the normal from object-space to eye-space
+	//    We will do all of our lighting in eye-space
+	//------------------------------------------------------------
+	float3 normal = normalize( mul( (float3x3)mx.ModelViewIT, IN.Norm.xyz ) );
+	
+	OUT.Tex0 = texgen_sphere(IN.VPos, normal, tex);
+	OUT.Tex1 = IN.Tex1;
+	OUT.Tex2 = IN.Tex2;
+	OUT.Tex3 = IN.Tex3;
+	
+	OUT.PCol = light_simple_point(EPos.xyz, normal, lt.LightPos.xyz, 
+		IN.PCol, mat.AmbMat,  lt.DiffLight, mat.ShineMat.x);    
+	
+	return OUT;
+}

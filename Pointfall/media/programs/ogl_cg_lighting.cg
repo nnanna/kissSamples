@@ -1,0 +1,55 @@
+struct vertex
+{
+    float4 position : POSITION;
+    float4 normal   : NORMAL;
+    float4 color0   : COLOR0;
+};
+
+struct fragment
+{
+    float4 position : POSITION;
+    float4 color0   : COLOR0;
+};
+
+fragment main( vertex IN, 
+               uniform float4x4 modelViewProjection,
+               uniform float4x4 modelViewInverse,
+			   uniform float4 eyePosition,
+               uniform float4 lightVector )
+{
+    fragment OUT;
+
+    OUT.position = mul( modelViewProjection, IN.position );
+//OUT.position = mul( glstate.matrix.mvp, IN.position );
+
+    // Transform normal from model-space to view-space
+    float4 normal = normalize( mul( modelViewInverse, IN.normal ).xyzz );
+//float4 normal = normalize( mul( glstate.matrix.inverse.modelview[0], IN.normal ).xyzz );
+
+    // Store normalized light vector
+    float4 light = normalize( lightVector );
+
+    // Calculate half angle vector
+    float4 eye = eyePosition;
+    float4 half = normalize( light + eye );
+    
+    // Calculate diffuse component
+    float diffuse = dot( normal, light );
+
+    // Calculate specular component
+    float specular = dot( normal, half );
+    specular = pow( specular, 32 );
+
+	// A little ambient color
+	float4 ambientColor = float4( 0.2, 0.2, 0.2, 0.2 );
+
+	// White specular
+    float4 specularMaterial = float4( 1.0, 1.0, 1.0, 1.0 );
+
+    // Combine diffuse and specular contributions and output final vertex color
+    OUT.color0 = diffuse * IN.color0 + specular * specularMaterial + ambientColor;
+
+    return OUT;
+}
+
+
