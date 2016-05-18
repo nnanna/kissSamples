@@ -28,6 +28,7 @@ static Material gFontMaterial;
 void GLRenderer::drawTextData()
 {
 	glRasterPos3f(-1, 0.92, 0);
+	gFontMaterial.ShaderContainer->bindProgram();
 	gFontMaterial.SetShaderParams();
 
 	for (auto& td : mRenderTextBuffer)
@@ -164,7 +165,6 @@ void GLRenderer::render()
 
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	glEnableClientState( GL_VERTEX_ARRAY );
-	glEnableClientState( GL_NORMAL_ARRAY );
 
 	for( const RenderData* rd : mRenderData )
 	{
@@ -181,13 +181,18 @@ void GLRenderer::render()
 
 		glVertexPointer( vert_size, GET_GLTYPE(vb), stride, vb);
 		if (rd->normOffset)
+		{
+			glEnableClientState( GL_NORMAL_ARRAY );
 			glNormalPointer( GET_GLTYPE(norms), stride, norms);
+#ifdef TARGET_GL_SHADERS
+			glEnableVertexAttribArray(SA_NORMAL);
+			glVertexAttribPointer(SA_NORMAL, vert_size, GET_GLTYPE(norms), GL_FALSE, stride, norms);
+#endif
+		}
 
 #ifdef TARGET_GL_SHADERS
 		// these correspond to glBindAttribLocation()
 		glVertexAttribPointer(SA_POSITION,	vert_size, GET_GLTYPE(vb),		GL_FALSE, stride, vb);
-		if ( rd->normOffset )
-			glVertexAttribPointer(SA_NORMAL,vert_size, GET_GLTYPE(norms),	GL_FALSE, stride, norms);
 #endif
 		if (ib)
 			glDrawElements(rd->renderMode, num_indices, GET_GLTYPE(ib), ib);
@@ -197,10 +202,11 @@ void GLRenderer::render()
 		mMRUShader = mat->ShaderContainer;
 	}
 
-	drawTextData();
-
 	glDisableClientState( GL_VERTEX_ARRAY );
 	glDisableClientState( GL_NORMAL_ARRAY );
+	mMRUShader->unbindProgram();
+
+	drawTextData();
 
 	glutSwapBuffers();
 

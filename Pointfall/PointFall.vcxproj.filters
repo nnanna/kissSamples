@@ -88,9 +88,6 @@
     <ClInclude Include="AppLayer\GLApplication.h">
       <Filter>AppLayer</Filter>
     </ClInclude>
-    <ClInclude Include="AssetLoader\rgbe.h">
-      <Filter>AssetLoader</Filter>
-    </ClInclude>
     <ClInclude Include="RenderEngine\GLRenderer.h">
       <Filter>RenderEngine</Filter>
     </ClInclude>

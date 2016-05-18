@@ -295,7 +295,6 @@ void SimpleShaderContainer::bindProgram(ShaderProgram& prog)
 	CHECK_GL_ERROR;
 	glUseProgram(prog);
 	glEnableVertexAttribArray(SA_POSITION);
-	glEnableVertexAttribArray(SA_NORMAL);
 	CHECK_GL_ERROR;
 }
 
@@ -304,6 +303,7 @@ void SimpleShaderContainer::unbindProgram()
 	glUseProgram(0);
 	glDisableVertexAttribArray(SA_POSITION);
 	glDisableVertexAttribArray(SA_NORMAL);
+	glDisableClientState(GL_NORMAL_ARRAY);
 
 	mIsBound = false;
 }
