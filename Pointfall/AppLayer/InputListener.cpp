@@ -1,7 +1,7 @@
 
 #include "InputListener.h"
 #include "GLApplication.h"
-#include <GL/glut.h>
+#include <RenderEngine\GL\glut.h>
 
 
 ksU32	InputListener::mKeyDown = 0;

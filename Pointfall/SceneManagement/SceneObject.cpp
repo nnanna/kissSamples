@@ -1,22 +1,21 @@
 
 #include "SceneObject.h"
-#include <Macros.h>
-#include <AppLayer\Service.h>
+#include <defines.h>
+#include <Service.h>
 #include <AppLayer\GLApplication.h>
 #include <AssetLoader\kissModel.h>
 #include <RenderEngine\RenderData.h>
 #include <RenderEngine\GLRenderer.h>
+#include <RenderEngine\Material.h>
 
-#define CHECK_INIT_MODEL	if (!mModel) mModel = new Model()
+#define CHECK_INIT_MODEL	if (!mModel) mModel = new ks::Model()
 
 
-using namespace ks;
-
-SceneObject::SceneObject(void) : mUID(-1),
-								mModel(NULL),
-								mMaterial(NULL),
-								mRenderData(NULL),
-								mWorld(Matrix4x4::IDENTITY)
+SceneObject::SceneObject() : mUID(-1),
+							mModel(NULL),
+							mMaterial(NULL),
+							mRenderData(NULL),
+							mWorld(ks::Matrix::IDENTITY)
 {
 	VRegister();
 }
@@ -25,7 +24,7 @@ SceneObject::SceneObject(void) : mUID(-1),
 //================================================================================================================
 
 
-SceneObject::~SceneObject(void)
+SceneObject::~SceneObject()
 {
 	delete mRenderData;
 	delete mMaterial;
@@ -87,15 +86,15 @@ void SceneObject::fillRenderData()
 		delete mRenderData;
 
 	mModel->computeNormals();
-	mModel->compileModel(eptAll);
+	mModel->compileModel(ks::eTriangles);
 	auto verts				= mModel->getCompiledVertices();
-	auto indies				= mModel->getCompiledIndices(eptTriangles);
+	auto indies				= mModel->getCompiledIndices(ks::eTriangles);
 	mRenderData				= new RenderData(verts, indies, mWorld);
 	mRenderData->stride		= mModel->getCompiledVertexSize() * sizeof(float);
-	mRenderData->numIndices = mModel->getCompiledIndexCount(eptTriangles);
+	mRenderData->numIndices = mModel->getCompiledIndexCount(ks::eTriangles);
 	mRenderData->normOffset = mModel->getCompiledNormalOffset();
 	mRenderData->vertexSize = mModel->getPositionSize();
-	mRenderData->renderMode = mModel->getPrimType() == eptNone ? GL_QUADS : GL_TRIANGLES;
+	mRenderData->renderMode = mModel->getPrimType();
 }
 
 
@@ -104,11 +103,12 @@ void SceneObject::fillRenderData()
 
 void SceneObject::initMaterial( const char* filename, const char* vp_entry, const char* fp_entry )
 {
-	mMaterial = new Material( RenderResourceFactory::findOrCreateShader( filename ) );
+	if (mMaterial == nullptr)
+	{
+		mMaterial = new Material(GLApplication::loadShader(filename, vp_entry, fp_entry));
 
-	Material::setBrassMaterial( mMaterial );
-
-	mMaterial->ShaderContainer->loadProgram(filename, vp_entry, fp_entry);
+		Material::setBrassMaterial(mMaterial);
+	}
 }
 
 
@@ -119,7 +119,7 @@ void SceneObject::update(float elapsed)
 	if ( mRenderData )
 	{
 		mRenderData->material	= mMaterial;
-		Service<GLRenderer>::Get()->addRenderData( mRenderData );
+		Service<ks::GLRenderer>::Get()->addRenderData( mRenderData );
 	}
 }
 

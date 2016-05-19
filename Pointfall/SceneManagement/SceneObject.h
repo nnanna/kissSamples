@@ -8,11 +8,14 @@
 namespace ks
 {
 	class Model;
+	class RenderData;
+	struct Material;
 }
-class RenderData;
-struct Material;
 
-typedef ks::Matrix4x4	Matrix;
+typedef ks::Model		Model;
+typedef ks::Matrix		Matrix;
+typedef ks::RenderData	RenderData;
+typedef ks::Material	Material;
 
 
 

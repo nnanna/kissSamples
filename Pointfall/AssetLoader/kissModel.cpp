@@ -69,7 +69,7 @@ namespace ks
 		mVertexSize		= 3;
 		mVertexCount	= 24;
 		mIndexCount		= 24;
-		mPrimType		= eptNone;
+		mPrimType		= eQuad;
 
 		return true;
 	}
@@ -92,7 +92,7 @@ namespace ks
 		mVertexSize		= 3;
 		mVertexCount	= 12;
 		mIndexCount		= 4;
-		mPrimType		= eptNone;
+		mPrimType		= eQuad;
 
 		return true;
 	}

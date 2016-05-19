@@ -4,16 +4,18 @@
 #include "ParticleSystem.h"
 #include <FX\Particles.h>
 #include <Maths\ks_Maths.inl>
+#include <RenderEngine\GL\glew.h>
+#include <RenderEngine\Material.h>
 #include <RenderEngine\GLRenderer.h>
 #include <RenderEngine\RenderData.h>
 #include <AppLayer\GLApplication.h>
-#include <AppLayer\Service.h>
+#include <Service.h>
 #include <Containers\CyclicConcurrentQueue.h>
 #include <Concurrency\JobScheduler.hpp>
 #include <Physics\AsyncSolver.h>
-#include <Macros.h>
+#include <defines.h>
 
-typedef ks::Matrix4x4	Matrix;
+typedef ks::Matrix	Matrix;
 typedef ks::vec3		vec3;
 
 static const ks::ParticleController	sDefaultController;
@@ -22,14 +24,12 @@ ParticleSystem::ParticleSystem() : mMaterial( nullptr )
 {
 	glPointSize( PARTICLE_GL_POINT_SIZE );
 
-	initShader(gUnlitShaderFilename, gUnlitVertProgram, gUnlitFragProgram);
-
 	VRegister();
 }
 
 //=================================================================================================================
 
-ParticleSystem::~ParticleSystem(void)
+ParticleSystem::~ParticleSystem()
 {
 	for (auto& i : mRenderGroups)
 		delete i.second;
@@ -90,7 +90,7 @@ void ParticleSystem::destroy(size_t pEmitterID)
 
 void ParticleSystem::step(float elapsed)
 {
-	GLRenderer* renderer = Service<GLRenderer>::Get();
+	ks::GLRenderer* renderer = Service<ks::GLRenderer>::Get();
 
 	ks::CollisionSolver::BeginBatch();
 
@@ -140,38 +140,13 @@ void ParticleSystem::VRegister()
 }
 
 //=================================================================================================================
-/*
-	Load a cg shader file
-	Grab handles to its parameters
-*/
 
-void ParticleSystem::initShader(const char *name, const char* vp_entry, const char* fp_entry)
+void ParticleSystem::initMaterial(const char *name, const char* vp_entry, const char* fp_entry)
 {
 	if (mMaterial == nullptr)
 	{
-		mMaterial = new Material();
-		mMaterial->ShaderContainer = RenderResourceFactory::findOrCreateShader(name);
-
-		mMaterial->ShaderContainer->loadProgram(name, vp_entry, fp_entry);
-
+		mMaterial = new Material( GLApplication::loadShader(name, vp_entry, fp_entry) );
 		Material::setRedPlasticMaterial(mMaterial);
 	}
 }
-
-
-//=================================================================================================================
-
-void ParticleSystem::setShaderParams()
-{}
-
-
-//=================================================================================================================
-
-void ParticleSystem::unsetShaderParams()
-{
-	mMaterial->ShaderContainer->disableFragProfile();
-	mMaterial->ShaderContainer->disableVertProfile();
-}
-
-//=================================================================================================================
 

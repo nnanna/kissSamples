@@ -10,8 +10,8 @@
 #include "Array.h"
 #include <Maths/ks_Maths.h>
 
-typedef ks::Matrix4x4	Matrix;
-typedef ks::vec3		vec3;
+typedef ks::Matrix	Matrix;
+typedef ks::vec3	vec3;
 
 class Camera
 {

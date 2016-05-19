@@ -5,17 +5,19 @@
 #include <Array.h>
 #include <map>
 
-struct Material;
-class RenderData;
 
 namespace ks
 {
 	struct ParticleController;
 	struct Particles;
 	struct Emitter;
+	struct Material;
+	class RenderData;
 }
 
-typedef ksU32		FXID;
+typedef ksU32			FXID;
+typedef ks::RenderData	RenderData;
+typedef ks::Material	Material;
 
 
 class ParticleSystem
@@ -34,13 +36,9 @@ public:
 	ksU32 getUID() const								{ return mUID; }
 	
 
-	void initShader( const char* filename, const char* vp_entry, const char* fp_entry );
+	void initMaterial( const char* shadername, const char* vp_entry, const char* fp_entry );
 
 	void step(float elapsed);
-
-	void setShaderParams();
-
-	void unsetShaderParams();
 
 
 private:

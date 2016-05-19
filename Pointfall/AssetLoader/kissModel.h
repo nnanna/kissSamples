@@ -2,19 +2,10 @@
 #ifndef KISS_MODEL
 #define KISS_MODEL
 
-#include <defines.h>
+#include <RenderEngine\RenderData.h>
 
 namespace ks
 {
-	enum PrimType {
-		eptNone = 0x0,
-		eptPoints = 0x1,
-		eptEdges = 0x2,
-		eptTriangles = 0x4,
-		eptTrianglesWithAdjacency = 0x8,
-		eptAll = 0xf
-	};
-
 	class Model
 	{
 	public:
@@ -32,17 +23,17 @@ namespace ks
 
 		void computeNormals();
 
-		void compileModel(PrimType prim = eptTriangles);
+		void compileModel(PrimType prim = eTriangles);
 
 		const float* getCompiledVertices() const;
 
-		const ksU32* getCompiledIndices(PrimType prim = eptTriangles) const;
+		const ksU32* getCompiledIndices(PrimType prim = eTriangles) const;
 		
 		ks32 getCompiledVertexSize() const;
 
 		ks32 getCompiledVertexCount() const;
 
-		ks32 getCompiledIndexCount(PrimType prim = eptTriangles) const;
+		ks32 getCompiledIndexCount(PrimType prim = eTriangles) const;
 
 		ks32 getCompiledNormalOffset() const;
 

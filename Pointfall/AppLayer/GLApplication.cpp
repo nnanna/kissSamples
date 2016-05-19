@@ -5,25 +5,38 @@
 	Can be overloaded in derived class
 */
 
+#include <RenderEngine\RenderResourceFactory.h>
 #include "Service.h"
 #include <Maths/ks_Maths.inl>
-#include "Macros.h"
+#include "defines.h"
 #include "GLApplication.h"
 #include "InputListener.h"
 #include <RenderEngine\RenderData.h>
 #include <SceneManagement\SceneObject.h>
 #include <SceneManagement\Camera.h>
 #include <RenderEngine\GLRenderer.h>
+#include <RenderEngine\GL\glut.h>
 #include <FX\ParticleSystem.h>
 #include <FX\Particles.h>
 #include <Concurrency\JobScheduler.h>
 #include <chrono>
 
-typedef ks::Matrix4x4	Matrix;
-typedef ks::vec4		vec4;
-
+typedef ks::Matrix	Matrix;
+typedef ks::vec4	vec4;
 
 using namespace std::chrono;
+
+
+struct RenderTextDesc
+{
+	static const u32 MAX_SIZE = 32;
+	char		text[MAX_SIZE];
+	Material*	mat;
+	struct
+	{
+		float x, y;
+	}normalised_scr_coords;
+};
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -52,10 +65,59 @@ double getElapsedTimeS()
 }
 
 
+DECLARE_SHADER_CONSTANT(globalAmbient)
+DECLARE_SHADER_CONSTANT(lightColor)
+DECLARE_SHADER_CONSTANT(modelViewProj)
+DECLARE_SHADER_CONSTANT(eyePosition)
+DECLARE_SHADER_CONSTANT(lightPosition)
+DECLARE_SHADER_CONSTANT(Kd)
+DECLARE_SHADER_CONSTANT(Ka)
+DECLARE_SHADER_CONSTANT(Ke)
+DECLARE_SHADER_CONSTANT(Ks)
+DECLARE_SHADER_CONSTANT(shininess)
+
+
+#define SC_GLOBAL_AMBIENT	SHADER_KEY_DECL(globalAmbient)	
+#define SC_LIGHT_COL		SHADER_KEY_DECL(lightColor)		
+#define SC_MODELVIEWPROJ	SHADER_KEY_DECL(modelViewProj)	
+#define SC_EYE_POS			SHADER_KEY_DECL(eyePosition)
+#define SC_LIGHT_POS		SHADER_KEY_DECL(lightPosition)	
+
+#define SC_DIFFUSE			SHADER_KEY_DECL(Kd)
+#define SC_AMBIENT			SHADER_KEY_DECL(Ka)
+#define SC_EMISSIVE			SHADER_KEY_DECL(Ke)
+#define SC_SPECULAR			SHADER_KEY_DECL(Ks)
+#define SC_SHININESS		SHADER_KEY_DECL(shininess)
+
+static Material gFontMaterial;
+
+static const int TOTAL_SHADER_CONSTANTS = 10;
+static ks::ShaderKey gShaderConstants[TOTAL_SHADER_CONSTANTS] =	// ordering needs to be same as Material::ShaderConstantsID
+{
+	SC_DIFFUSE,
+	SC_AMBIENT,
+	SC_EMISSIVE,
+	SC_SPECULAR,
+	SC_SHININESS,
+
+	SC_GLOBAL_AMBIENT,
+	SC_LIGHT_COL,
+	SC_EYE_POS,
+	SC_LIGHT_POS,
+	SC_MODELVIEWPROJ,
+};
+
+
+const char	*gLitShaderFilename		= "__default",
+			*gBasicLitVertProgram	= "media\\programs\\basicLight_v.glsl",
+			*gBasicLitFragProgram	= "media\\programs\\basicLight_f.glsl",
+			*gUnlitShaderFilename	= "__unlit",
+			*gUnlitVertProgram		= "media\\programs\\basicUnlit_v.glsl",
+			*gUnlitFragProgram		= "media\\programs\\basicUnlit_f.glsl";
 
 //================================================================================================================
 
-GLApplication::GLApplication(void)
+GLApplication::GLApplication()
 	: mIsFullscreen(false)
 	, mRenderer(nullptr)
 	, mJobScheduler(nullptr)
@@ -63,11 +125,14 @@ GLApplication::GLApplication(void)
 	, mElapsedS(0)
 {
 	strcpy_s( mAppName, sizeof(mAppName), "PointFall" );
+	gFPSData.mat	= &gFontMaterial;
+	gFPSData.normalised_scr_coords.x = -1.f;
+	gFPSData.normalised_scr_coords.y = 0.92f;
 }
 
 //================================================================================================================
 
-GLApplication::~GLApplication(void)
+GLApplication::~GLApplication()
 {
 	quit();
 }
@@ -86,8 +151,8 @@ bool GLApplication::init(int argc, char** argv)
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
 
 	glutCreateWindow(mAppName);
-	glutDisplayFunc(GLRenderer::render_callback);
-	glutReshapeFunc(GLRenderer::reshape_callback);
+	glutDisplayFunc(GLApplication::render_callback);
+	glutReshapeFunc(GLApplication::reshape_callback);
 	glutKeyboardFunc(InputListener::KeyDownCallback);
 	glutKeyboardUpFunc(InputListener::KeyUpCallback);
 	glutTimerFunc( 1, GLApplication::update_callback, 1 );
@@ -97,12 +162,16 @@ bool GLApplication::init(int argc, char** argv)
 
 	Service<GLApplication>::Register( this );
 
-	mRenderer = new GLRenderer();
-	Service<GLRenderer>::Register( mRenderer );
+	mRenderer = new ks::GLRenderer();
+	Service<ks::GLRenderer>::Register(mRenderer);
+
+	CameraManager::createCamera();
 
 	mJobScheduler = new ks::JobScheduler(3, 7);		// 3 workers, 7 jobs max, multi-producer
 	Service<ks::JobScheduler>::Register( mJobScheduler );
 
+	gFontMaterial.SetDiffuse(0, 0, 0);
+	gFontMaterial.ShaderContainer = loadShader(gUnlitShaderFilename, gUnlitVertProgram, gUnlitFragProgram);
 
 	//glutCreateMenu(menu);
 	//glutAddMenuEntry("[ ] Animate", ' ');
@@ -131,7 +200,7 @@ bool GLApplication::init(int argc, char** argv)
 
 	ParticleSystem* pSys = new ParticleSystem();
 	{
-		pSys->initShader(gLitShaderFilename, gBasicLitVertProgram, gBasicLitFragProgram);
+		pSys->initMaterial(gLitShaderFilename, gBasicLitVertProgram, gBasicLitFragProgram);
 
 		ks::ParticleController c;
 		c.SizeDurationRange		= vec4( 0.2f, 0.2f, 10.4f, 11.8f );
@@ -161,7 +230,7 @@ bool GLApplication::init(int argc, char** argv)
 
 	initTimer();
 
-	//printf("frame time = xxxxxxx");
+	Material::gConstantsRegistry = gShaderConstants;
 
 	return true;
 }
@@ -210,7 +279,7 @@ void GLApplication::update(ks32 pCallbackID)
 	gFrameAggregate += mElapsedS;
 
 	sprintf_s(gFPSData.text, "FPS : %.1f", gFPS);
-	mRenderer->addRenderTextData(gFPSData);
+	addRenderTextData(gFPSData);
 	
 	
 	for (size_t i = 0; i < mParticleSubsytems.size(); ++i)
@@ -285,5 +354,73 @@ void GLApplication::update_callback(ks32 pCallbackID)
 	glutTimerFunc(1, GLApplication::update_callback, pCallbackID);
 }
 
+//================================================================================================================
+
+void GLApplication::reshape_callback(int width, int height)
+{
+	float aspect = float(width) / float(height);
+	for (ksU32 i = 0; i < CameraManager::getNumCameras(); ++i)
+	{
+		Camera* cam = CameraManager::getCamera(i);
+
+		cam->setAspectRatio(aspect);
+		cam->refreshProjectionMatrix();
+	}
+	glViewport(0, 0, width, height);
+}
+
+
+void GLApplication::render_callback()
+{
+	Camera* cam = CameraManager::getMainCamera();
+
+	Service<ks::GLRenderer>::Get()->render(cam->getPosition(), cam->getView(), cam->getProjection());
+
+	Service<GLApplication>::Get()->drawTextData();
+
+	glutSwapBuffers();
+	//glutReportErrors();
+}
 
 //================================================================================================================
+
+
+ks::SimpleShaderContainer* GLApplication::loadShader(const char* name, const char* vp_filename, const char* fp_filename)
+{
+	ks::SimpleShaderContainer* shader = ks::RenderResourceFactory::findShader(name);
+	if (shader == nullptr)
+	{
+		shader = ks::RenderResourceFactory::findOrCreateShader(name);
+		shader->loadProgram(gUnlitShaderFilename, gUnlitVertProgram, gUnlitFragProgram);
+
+		for (int i = 0; i < TOTAL_SHADER_CONSTANTS; ++i)
+		{
+			shader->registerConstant(gShaderConstants[i]);
+		}
+	}
+	return shader;
+}
+
+//================================================================================================================
+
+void GLApplication::addRenderTextData(const RenderTextDesc& pDesc)
+{
+	mRenderTextBuffer.push_back(pDesc);
+}
+
+//================================================================================================================
+
+void GLApplication::drawTextData()
+{
+	for (RenderTextDesc& td : mRenderTextBuffer)
+	{
+		glRasterPos3f(td.normalised_scr_coords.x, td.normalised_scr_coords.y, 0);
+		td.mat->ShaderContainer->bindProgram();
+		td.mat->SetShaderParams();
+		auto& buffer = td.text;
+		for (int i = 0; i < RenderTextDesc::MAX_SIZE && buffer[i] != '\0'; ++i)
+			glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, buffer[i]);
+	}
+
+	mRenderTextBuffer.clear();
+}

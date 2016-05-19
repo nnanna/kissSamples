@@ -22,7 +22,7 @@
 #include "AsyncSolver.h"
 #include <Maths\ks_Maths.inl>
 #include <insertion.h>
-#include <AppLayer\Service.h>
+#include <Service.h>
 #include <Containers\CyclicConcurrentQueue.h>
 #include <Concurrency\JobScheduler.hpp>
 #include <Concurrency\Semaphore.h>

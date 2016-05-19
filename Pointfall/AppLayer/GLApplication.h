@@ -6,16 +6,27 @@
 
 #pragma once
 
+
+extern const char* gBasicLitVertProgram;
+extern const char* gBasicLitFragProgram;
+extern const char* gLitShaderFilename;
+extern const char* gUnlitVertProgram;
+extern const char* gUnlitFragProgram;
+extern const char* gUnlitShaderFilename;
+
+
 #include "defines.h"
 #include <Array.h>
 
 
+struct RenderTextDesc;
 class ParticleSystem;
 class SceneObject;
-class GLRenderer;
 namespace ks
 {
 	class JobScheduler;
+	class GLRenderer;
+	class SimpleShaderContainer;
 }
 
 
@@ -24,9 +35,9 @@ class GLApplication
 {
 public:
 
-	GLApplication(void);
+	GLApplication();
 
-	virtual ~GLApplication(void);
+	virtual ~GLApplication();
 
 	/*	Initiliaze all that's needed for app to run. Returns false on fail */
 	virtual bool init(int argc, char** argv);
@@ -69,9 +80,9 @@ public:
 	/*	clean up after app and exit	*/
 	virtual void quit();
 
-	
-	/* update callback handle for glut loop */
-	static void update_callback(int);
+	void	addRenderTextData(const RenderTextDesc& pDesc);
+
+	static ks::SimpleShaderContainer* loadShader(const char* name, const char* vp_filename, const char* fp_filename);
 
 
 
@@ -81,7 +92,7 @@ protected:
 	template<class T>
 	ks::Array<T*>&		getObjectCollection();
 
-	GLRenderer*			mRenderer;
+	ks::GLRenderer*		mRenderer;
 
 	ks::JobScheduler*	mJobScheduler;
 
@@ -101,6 +112,18 @@ protected:
 	ks::Array<ParticleSystem*>	mParticleSubsytems;
 
 	ks::Array<SceneObject*>		mSceneObjects;
+
+private:
+
+	ks::Array<RenderTextDesc>	mRenderTextBuffer;
+
+	void drawTextData();
+
+	static void update_callback(int);
+
+	static void reshape_callback(int width, int height);
+	
+	static void render_callback();
 
 };
 

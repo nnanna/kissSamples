@@ -15,14 +15,8 @@
     <Filter Include="AssetLoader">
       <UniqueIdentifier>{37e2bcd2-c2ed-42c1-becd-e350a5b0305e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="RenderEngine">
-      <UniqueIdentifier>{9dc22241-4f69-4317-adf3-b66721958fac}</UniqueIdentifier>
-    </Filter>
     <Filter Include="SceneManagement">
       <UniqueIdentifier>{09053329-a55b-4d0c-90ca-f00e17b0231e}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="RenderEngine\RenderTarget">
-      <UniqueIdentifier>{ed3ad2d2-4c01-4704-948a-ac15844ed8b4}</UniqueIdentifier>
     </Filter>
     <Filter Include="FX">
       <UniqueIdentifier>{17f55a7e-98b9-4132-a067-44ced4cde2bd}</UniqueIdentifier>
@@ -41,29 +35,11 @@
     <ClCompile Include="AppLayer\GLApplication.cpp">
       <Filter>AppLayer</Filter>
     </ClCompile>
-    <ClCompile Include="RenderEngine\GLRenderer.cpp">
-      <Filter>RenderEngine</Filter>
-    </ClCompile>
     <ClCompile Include="AppLayer\InputListener.cpp">
       <Filter>AppLayer</Filter>
     </ClCompile>
     <ClCompile Include="SceneManagement\Camera.cpp">
       <Filter>SceneManagement</Filter>
-    </ClCompile>
-    <ClCompile Include="RenderEngine\RenderTarget.cpp">
-      <Filter>RenderEngine\RenderTarget</Filter>
-    </ClCompile>
-    <ClCompile Include="RenderEngine\RenderResourceFactory.cpp">
-      <Filter>RenderEngine</Filter>
-    </ClCompile>
-    <ClCompile Include="RenderEngine\SimpleGLSLContainer.cpp">
-      <Filter>RenderEngine</Filter>
-    </ClCompile>
-    <ClCompile Include="RenderEngine\SimpleCgContainer.cpp">
-      <Filter>RenderEngine</Filter>
-    </ClCompile>
-    <ClCompile Include="RenderEngine\Material.cpp">
-      <Filter>RenderEngine</Filter>
     </ClCompile>
     <ClCompile Include="AssetLoader\kissModel.cpp">
       <Filter>AssetLoader</Filter>
@@ -88,32 +64,14 @@
     <ClInclude Include="AppLayer\GLApplication.h">
       <Filter>AppLayer</Filter>
     </ClInclude>
-    <ClInclude Include="RenderEngine\GLRenderer.h">
-      <Filter>RenderEngine</Filter>
-    </ClInclude>
     <ClInclude Include="AppLayer\InputListener.h">
       <Filter>AppLayer</Filter>
     </ClInclude>
     <ClInclude Include="SceneManagement\Camera.h">
       <Filter>SceneManagement</Filter>
     </ClInclude>
-    <ClInclude Include="RenderEngine\RenderTarget.h">
-      <Filter>RenderEngine\RenderTarget</Filter>
-    </ClInclude>
-    <ClInclude Include="RenderEngine\RenderResourceFactory.h">
-      <Filter>RenderEngine</Filter>
-    </ClInclude>
     <ClInclude Include="AppLayer\Service.h">
       <Filter>AppLayer</Filter>
-    </ClInclude>
-    <ClInclude Include="RenderEngine\SimpleShaderContainer.h">
-      <Filter>RenderEngine</Filter>
-    </ClInclude>
-    <ClInclude Include="RenderEngine\Material.h">
-      <Filter>RenderEngine</Filter>
-    </ClInclude>
-    <ClInclude Include="RenderEngine\Light.h">
-      <Filter>RenderEngine</Filter>
     </ClInclude>
     <ClInclude Include="AssetLoader\kissModel.h">
       <Filter>AssetLoader</Filter>
@@ -127,9 +85,6 @@
     <ClInclude Include="FX\ParticleSystem.h">
       <Filter>FX</Filter>
     </ClInclude>
-    <ClInclude Include="Common\Macros.h">
-      <Filter>Common</Filter>
-    </ClInclude>
     <ClInclude Include="Physics\AsyncSolver.h">
       <Filter>Physics</Filter>
     </ClInclude>
@@ -138,9 +93,6 @@
     </ClInclude>
     <ClInclude Include="Physics\Constraint.h">
       <Filter>Physics</Filter>
-    </ClInclude>
-    <ClInclude Include="RenderEngine\RenderData.h">
-      <Filter>RenderEngine</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

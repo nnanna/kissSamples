@@ -1,9 +1,12 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.40629.0
+VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PointFall", "PointFall.vcxproj", "{7F5D570D-F342-498B-B7E1-DB0FFD17C652}"
+	ProjectSection(ProjectDependencies) = postProject
+		{BB1E90E7-A17F-4FB2-94D4-D56FE1197C38} = {BB1E90E7-A17F-4FB2-94D4-D56FE1197C38}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "kissFramework", "..\..\kissFramework\build\ksFramework.vcxproj", "{BB1E90E7-A17F-4FB2-94D4-D56FE1197C38}"
 EndProject

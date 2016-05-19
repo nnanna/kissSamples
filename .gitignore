@@ -61,3 +61,4 @@ Pointfall/Lib/assimp.lib
 *.sdf
 *.suo
 *.user
+*.vspx
