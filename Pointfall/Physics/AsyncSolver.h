@@ -25,6 +25,8 @@
 #include <Array.h>
 
 
+struct Constraint;
+
 namespace ks
 {
 	struct vec3;
@@ -33,6 +35,7 @@ namespace ks
 	struct async_context
 	{
 		async_context(LocalSolver& pSolver);
+		~async_context();
 		void SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel);
 		LocalSolver& Data();
 	
@@ -43,7 +46,14 @@ namespace ks
 	class CollisionSolver
 	{
 	public:
-		static async_context BeginAsync( Array<vec3>& pForceResults, ksU32 pNumElements, float elapsed );
+		struct ConstraintConfig
+		{
+			Constraint* constraint;
+			float*	rPositions;
+			float*	rVelocities;
+			ksU32	numElements;
+		};
+		static async_context BeginAsync( Array<vec3>& pForceResults, ksU32 pNumElements, float elapsed, const ConstraintConfig* pConstraint = nullptr );
 		static void AwaitQueryCompletion( Array<vec3>& pForceResults );
 		static void BeginBatch();
 		static void EndBatch();

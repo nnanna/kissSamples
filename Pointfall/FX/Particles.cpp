@@ -147,7 +147,14 @@ namespace ks
 	void ParticleController::step( Particles& pParticles, float elapsed ) const
 	{
 		const ksU32 numParticles	= pParticles.live_count();
-		async_context ctx			= CollisionSolver::BeginAsync(pParticles.forces, numParticles, elapsed);
+		CollisionSolver::ConstraintConfig ccfg;
+		{
+			ccfg.constraint		= &sParticleFloorConstraint;
+			ccfg.numElements	= numParticles;
+			ccfg.rPositions		= (float*)pParticles.positions.data(); 
+			ccfg.rVelocities	= (float*)pParticles.velocities.data(); 
+		}
+		async_context ctx			= CollisionSolver::BeginAsync(pParticles.forces, numParticles, elapsed, &ccfg);
 
 		float halfstep				= elapsed * 0.5f;
 		const vec3 half_a_t			= BaseAcceleration * halfstep;
@@ -166,11 +173,11 @@ namespace ks
 			pos += (vel * elapsed);
 			vel += half_accel;
 
-			sParticleFloorConstraint.Satisfy(&pos.x, &vel.x, nullptr, 1);	// TODO: make batched & async
+			//sParticleFloorConstraint.Satisfy(&pos.x, &vel.x, nullptr, 1);	// TODO: make batched & async
 			
 			ctx.SubmitQuery( i, pos, vel );
-			pParticles.velocities[i] = vel;
-			pParticles.positions[i] = pos;
+			//pParticles.velocities[i] = vel;
+			//pParticles.positions[i] = pos;
 		}
 	}
 }

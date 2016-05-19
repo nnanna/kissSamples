@@ -20,6 +20,7 @@
 #define USE_STL_SORT	1	// faster for huge datasets but slower in debug mode
 
 #include "AsyncSolver.h"
+#include "Constraint.h"
 #include <Maths\ks_Maths.inl>
 #include <insertion.h>
 #include <Service.h>
@@ -193,6 +194,11 @@ namespace ks {
 	async_context::async_context(LocalSolver& pSolver) : mSolver(pSolver)
 	{}
 
+	async_context::~async_context()
+	{
+		// TODO: wait for constraints
+	}
+
 	void async_context::SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel)
 	{
 		while (mSolver.capacity() == 0)
@@ -337,7 +343,7 @@ namespace ks {
 #define G_COLLISION_RADIUS_SQ		1.2f
 #define G_MAX_PER_ENTITY_COLLISIONS	2
 #define G_MAX_TOTAL_COLLISIONS		8000
-#define G_IMPULSE_FACTOR			0.2f
+#define G_IMPULSE_FACTOR			0.4f
 			vec3 norm, impulse_v;
 			ksU32 total_collisions(0);
 
@@ -424,9 +430,10 @@ namespace ks {
 	// CollisionSolver
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	async_context CollisionSolver::BeginAsync(Array<vec3>& pForceResults, ksU32 pNumElements, float elapsed)
+	async_context CollisionSolver::BeginAsync(Array<vec3>& pForceResults, ksU32 pNumElements, float elapsed, const ConstraintConfig* pConstraint )
 	{
-		LocalSolver& ls		= *LocalSolver::Acquire( &pForceResults );
+		JobScheduler* scheduler = Service<JobScheduler>::Get();
+		LocalSolver& ls			= *LocalSolver::Acquire( &pForceResults );
 
 		KS_ASSERT(pNumElements <= pForceResults.size());
 
@@ -460,7 +467,40 @@ namespace ks {
 
 		AwaitQueryCompletion( ls );
 
-		Service<JobScheduler>::Get()->QueueJob(solver, on_complete, "CollisionSolver");
+		if (pConstraint)
+		{
+			auto constraint_solver = [pConstraint, &ls]() -> ksU32
+			{
+				ksU32 index(0);
+				vec3 pos, vel;
+				vec3* rPos = (vec3*)pConstraint->rPositions;
+				vec3* rVel = (vec3*)pConstraint->rVelocities;
+				while (ls.capacity() < pConstraint->numElements )
+				{
+					if (index == ls.mRevision)
+					{
+						THREAD_SWITCH;
+					}
+					else
+					{
+						while (index < ls.mRevision)
+						{
+							pos = ls.mPositions[index];
+							vel = ls.mVelocities[index];
+							pConstraint->constraint->Satisfy(&pos.x, &vel.x, nullptr, 1);
+							rVel[index] = vel;
+							rPos[index] = pos;
+							++index;
+						}
+					}
+				}
+				return index;
+			};
+
+			scheduler->QueueJob(constraint_solver, "ConstraintSolver");
+		}
+
+		scheduler->QueueJob(solver, on_complete, "CollisionSolver");
 
 		return async_context( ls );
 	}
