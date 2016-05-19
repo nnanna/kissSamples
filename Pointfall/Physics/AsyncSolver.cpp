@@ -23,7 +23,6 @@
 #include <Maths\ks_Maths.inl>
 #include <insertion.h>
 #include <Service.h>
-#include <Containers\CyclicConcurrentQueue.h>
 #include <Concurrency\JobScheduler.hpp>
 #include <Concurrency\Semaphore.h>
 #include <Concurrency\ReadWriteLock.h>

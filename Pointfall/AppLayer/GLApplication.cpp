@@ -14,6 +14,7 @@
 #include <RenderEngine\RenderData.h>
 #include <SceneManagement\SceneObject.h>
 #include <SceneManagement\Camera.h>
+#include <RenderEngine\Material.h>
 #include <RenderEngine\GLRenderer.h>
 #include <RenderEngine\GL\glut.h>
 #include <FX\ParticleSystem.h>
@@ -224,6 +225,7 @@ bool GLApplication::init(int argc, char** argv)
 
 		pSys->spawn( emz );
 	}
+	glPointSize( PARTICLE_GL_POINT_SIZE );
 
 	//sceneObj->loadModel("..\\media\\models\\venusm.obj");
 	//sceneObj->loadModel("..\\media\\models\\crysponza_bubbles\\sponza.obj");

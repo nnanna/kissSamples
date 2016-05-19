@@ -2,28 +2,24 @@
 
 
 #include "ParticleSystem.h"
+#include <Service.h>
+#include <defines.h>
 #include <FX\Particles.h>
-#include <Maths\ks_Maths.inl>
-#include <RenderEngine\GL\glew.h>
+#include <Maths\ks_Maths.h>
+#include <Physics\AsyncSolver.h>
 #include <RenderEngine\Material.h>
 #include <RenderEngine\GLRenderer.h>
 #include <RenderEngine\RenderData.h>
 #include <AppLayer\GLApplication.h>
-#include <Service.h>
-#include <Containers\CyclicConcurrentQueue.h>
 #include <Concurrency\JobScheduler.hpp>
-#include <Physics\AsyncSolver.h>
-#include <defines.h>
 
 typedef ks::Matrix	Matrix;
-typedef ks::vec3		vec3;
+typedef ks::vec3	vec3;
 
 static const ks::ParticleController	sDefaultController;
 
 ParticleSystem::ParticleSystem() : mMaterial( nullptr )
 {
-	glPointSize( PARTICLE_GL_POINT_SIZE );
-
 	VRegister();
 }
 
@@ -58,7 +54,7 @@ size_t ParticleSystem::spawn(ks::Emitter& pDesc)
 	
 	RenderData* rg		= new RenderData( p->positions.data(), nullptr, Matrix::IDENTITY );
 	rg->vertexSize		= 3;
-	rg->renderMode		= GL_POINTS;
+	rg->renderMode		= ks::ePoints;
 	rg->stride			= sizeof(vec3);
 	rg->material		= mMaterial;
 	

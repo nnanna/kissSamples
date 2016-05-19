@@ -1,6 +1,6 @@
 #include "Camera.h"
-#include "defines.h"
-#include "../AppLayer/InputListener.h"
+#include <defines.h>
+#include <AppLayer/InputListener.h>
 
 
 Camera::Camera() : mNear(1), mFar(90000), mAspectRatio(0.75f), mFOV(60.0f), mAngle(0.f), mRadius(30.f)

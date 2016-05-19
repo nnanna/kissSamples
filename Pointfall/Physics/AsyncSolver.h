@@ -21,19 +21,18 @@
 #ifndef ASYNC_SOLVER_H
 #define ASYNC_SOLVER_H
 
-#include "defines.h"
+#include <defines.h>
 #include <Array.h>
+
 
 namespace ks
 {
 	struct vec3;
-}
+	struct LocalSolver;
 
-namespace ks
-{	
 	struct async_context
 	{
-		async_context(struct LocalSolver& pSolver);
+		async_context(LocalSolver& pSolver);
 		void SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel);
 		LocalSolver& Data();
 	
@@ -44,8 +43,8 @@ namespace ks
 	class CollisionSolver
 	{
 	public:
-		static async_context BeginAsync( Array<ks::vec3>& pForceResults, ksU32 pNumElements, float elapsed );
-		static void AwaitQueryCompletion( Array<ks::vec3>& pForceResults );
+		static async_context BeginAsync( Array<vec3>& pForceResults, ksU32 pNumElements, float elapsed );
+		static void AwaitQueryCompletion( Array<vec3>& pForceResults );
 		static void BeginBatch();
 		static void EndBatch();
 	private:

@@ -1,7 +1,7 @@
 
 #pragma once
 
-#include <Maths\ks_Maths.h>
+#include <defines.h>
 #include <Array.h>
 #include <map>
 

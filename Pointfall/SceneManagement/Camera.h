@@ -19,13 +19,13 @@ public:
 	Camera();
 	~Camera();
 
-	const vec3&			getPosition() const		{ return mPosition; }
+	const vec3&		getPosition() const			{ return mPosition; }
 
-	void				setPosition(vec3& pos)	{ mPosition = pos; }
+	void			setPosition(vec3& pos)		{ mPosition = pos; }
 
-	const vec3&			getLookAt()	const		{ return mLookAt; }
+	const vec3&		getLookAt()	const			{ return mLookAt; }
 
-	void				setLookAt(vec3& look)	{ mLookAt = look; }
+	void			setLookAt(vec3& look)		{ mLookAt = look; }
 
 	const Matrix&	getWorld()	const			{ return mWorld; }
 
