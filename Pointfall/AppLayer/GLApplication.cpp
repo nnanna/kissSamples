@@ -224,6 +224,14 @@ bool GLApplication::init(int argc, char** argv)
 		emz.mEmissionRate		= 300;
 
 		pSys->spawn( emz );
+
+
+		emz.mWorldPos = vec3(-3.f, 18.115f, 0.f);
+		emz.mEmissionVelocity = vec3(0.f, -0.2492f, 0.f);
+		emz.mMaxParticles = 3173;
+		emz.mEmissionRate = 200;
+
+		pSys->spawn(emz);
 	}
 	glPointSize( PARTICLE_GL_POINT_SIZE );
 
