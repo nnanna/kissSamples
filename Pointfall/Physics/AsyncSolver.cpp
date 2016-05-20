@@ -191,12 +191,19 @@ namespace ks {
 	// async_context
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	async_context::async_context(LocalSolver& pSolver) : mSolver(pSolver)
-	{}
-
-	async_context::~async_context()
+	async_context::async_context(LocalSolver& pSolver, const ConstraintConfig* pCC) : mSolver(pSolver), mConstraintCompletionLabel(nullptr)
 	{
-		// TODO: wait for constraints
+		if (pCC)
+			mConstraintCompletionLabel = pCC->completionLabel;
+	}
+
+	void async_context::SyncConstraints()
+	{
+		if (mConstraintCompletionLabel)
+		{
+			while (*mConstraintCompletionLabel == 0)
+				THREAD_SWITCH;
+		}
 	}
 
 	void async_context::SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel)
@@ -467,42 +474,45 @@ namespace ks {
 
 		AwaitQueryCompletion( ls );
 
+		JobHandle constraintJob;
+
 		if (pConstraint)
 		{
-			auto constraint_solver = [pConstraint, &ls]() -> ksU32
+			ConstraintConfig cc = *pConstraint;
+			*cc.completionLabel = 0x0;
+			auto constraint_solver = [cc, &ls]() -> ksU32*
 			{
 				ksU32 index(0);
-				vec3 pos, vel;
-				vec3* rPos = (vec3*)pConstraint->rPositions;
-				vec3* rVel = (vec3*)pConstraint->rVelocities;
-				while (ls.capacity() < pConstraint->numElements )
+				vec3* rPos = (vec3*)cc.rPositions;
+				vec3* rVel = (vec3*)cc.rVelocities;
+				while (index < cc.numElements)
 				{
-					if (index == ls.mRevision)
+					const ksU32 rev = ls.mRevision;
+					while (index < rev)
 					{
+						const ksU32 rsize = rev - index;
+						memcpy(rPos + index, ls.mPositions + index, rsize * sizeof(vec3));
+						memcpy(rVel + index, ls.mVelocities + index, rsize * sizeof(vec3));
+						cc.constraint->Satisfy(&rPos[index].x, &rVel[index].x, nullptr, rsize);
+						index = rev;
+					}
+					if ( index == ls.mRevision && index < cc.numElements )
 						THREAD_SWITCH;
-					}
-					else
-					{
-						while (index < ls.mRevision)
-						{
-							pos = ls.mPositions[index];
-							vel = ls.mVelocities[index];
-							pConstraint->constraint->Satisfy(&pos.x, &vel.x, nullptr, 1);
-							rVel[index] = vel;
-							rPos[index] = pos;
-							++index;
-						}
-					}
 				}
-				return index;
+				return cc.completionLabel;
 			};
 
-			scheduler->QueueJob(constraint_solver, "ConstraintSolver");
+			auto on_constraint_complete = [](ksU32* cLabel)
+			{
+				*cLabel = 0x1;
+			};
+
+			constraintJob = scheduler->QueueJob(constraint_solver, on_constraint_complete, "ConstraintSolver");
 		}
 
 		scheduler->QueueJob(solver, on_complete, "CollisionSolver");
 
-		return async_context( ls );
+		return async_context(ls, pConstraint);
 	}
 
 	void CollisionSolver::AwaitQueryCompletion(Array<vec3>& pForceResults)

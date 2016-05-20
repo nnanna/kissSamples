@@ -32,27 +32,30 @@ namespace ks
 	struct vec3;
 	struct LocalSolver;
 
+	struct ConstraintConfig
+	{
+		Constraint* constraint;
+		float*	rPositions;
+		float*	rVelocities;
+		ksU32	numElements;
+		ksU32*	completionLabel;
+	};
+
 	struct async_context
 	{
-		async_context(LocalSolver& pSolver);
-		~async_context();
+		async_context(LocalSolver& pSolver, const ConstraintConfig* pCC);
 		void SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel);
 		LocalSolver& Data();
+		void SyncConstraints();
 	
 	private:
-		LocalSolver& mSolver;
+		LocalSolver&	mSolver;
+		ksU32*			mConstraintCompletionLabel;
 	};
 
 	class CollisionSolver
 	{
 	public:
-		struct ConstraintConfig
-		{
-			Constraint* constraint;
-			float*	rPositions;
-			float*	rVelocities;
-			ksU32	numElements;
-		};
 		static async_context BeginAsync( Array<vec3>& pForceResults, ksU32 pNumElements, float elapsed, const ConstraintConfig* pConstraint = nullptr );
 		static void AwaitQueryCompletion( Array<vec3>& pForceResults );
 		static void BeginBatch();
