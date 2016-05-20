@@ -73,7 +73,6 @@ namespace ks {
 		{
 			mVelocities = mPositions = nullptr;
 			mIndex = mCapacity = mRevision = 0;
-			mConstraintRunning = false;
 		}
 
 		void init(StackBuffer& stack, size_t pNumElements)
@@ -176,7 +175,7 @@ namespace ks {
 		vec3*			mVelocities;
 		ksU32			mRevision;
 		Semaphore		IdleWatch;
-		bool			mConstraintRunning;
+		Event			mConstraintRunning;
 	private:
 		LocalSolver() : mVelocities(nullptr), mPositions(nullptr), mRevision(0), mCapacity(0), mIndex(0), mConstraintRunning(false)
 		{}
@@ -190,19 +189,12 @@ namespace ks {
 	// async_context
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	async_context::async_context(LocalSolver& pSolver, const ConstraintConfig* pCC) : mSolver(pSolver), mConstraintCompletionLabel(nullptr)
-	{
-		if (pCC)
-			mConstraintCompletionLabel = pCC->completionLabel;
-	}
+	async_context::async_context(LocalSolver& pSolver) : mSolver(pSolver)
+	{}
 
 	void async_context::SyncConstraints()
 	{
-		if (mConstraintCompletionLabel)
-		{
-			while (*mConstraintCompletionLabel == 0)
-				THREAD_SWITCH;
-		}
+		mSolver.mConstraintRunning.Wait();
 	}
 
 	void async_context::SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel)
@@ -455,10 +447,7 @@ namespace ks {
 
 			ksU32 numCollisions = ls.resolveCollisions(pForceResults.data(), elapsed);
 
-			while (ls.mConstraintRunning)
-			{
-				THREAD_SWITCH;
-			}
+			ls.mConstraintRunning.Wait();
 
 			gSolver.Release(stack);
 
@@ -478,14 +467,11 @@ namespace ks {
 
 		AwaitQueryCompletion( ls );
 
-		JobHandle constraintJob;
-
 		if (pConstraint)
 		{
 			ConstraintConfig cc = *pConstraint;
-			*cc.completionLabel = 0x0;
-			ls.mConstraintRunning = true;
-			auto constraint_solver = [cc, &ls]() -> ksU32*
+			ls.mConstraintRunning.SetState(true);
+			auto constraint_solver = [cc, &ls]() -> int
 			{
 				ksU32 index(0);
 				vec3* rPos = (vec3*)cc.rPositions;
@@ -504,21 +490,20 @@ namespace ks {
 					if ( index == ls.mRevision && index < cc.numElements )
 						THREAD_SWITCH;
 				}
-				return cc.completionLabel;
+				return 0;
 			};
 
-			auto on_constraint_complete = [&ls](ksU32* cLabel)
+			auto on_constraint_complete = [&ls](int unused)
 			{
-				*cLabel = 0x1;
-				ls.mConstraintRunning = false;
+				ls.mConstraintRunning.Notify();
 			};
 
-			constraintJob = scheduler->QueueJob(constraint_solver, on_constraint_complete, "ConstraintSolver");
+			scheduler->QueueJob(constraint_solver, on_constraint_complete, "ConstraintSolver");
 		}
 
 		scheduler->QueueJob(solver, on_complete, "CollisionSolver");
 
-		return async_context(ls, pConstraint);
+		return async_context(ls);
 	}
 
 	void CollisionSolver::AwaitQueryCompletion(Array<vec3>& pForceResults)

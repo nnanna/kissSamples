@@ -38,19 +38,17 @@ namespace ks
 		float*	rPositions;
 		float*	rVelocities;
 		ksU32	numElements;
-		ksU32*	completionLabel;
 	};
 
 	struct async_context
 	{
-		async_context(LocalSolver& pSolver, const ConstraintConfig* pCC);
+		async_context(LocalSolver& pSolver);
 		void SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel);
 		LocalSolver& Data();
 		void SyncConstraints();
 	
 	private:
 		LocalSolver&	mSolver;
-		ksU32*			mConstraintCompletionLabel;
 	};
 
 	class CollisionSolver

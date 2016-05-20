@@ -147,14 +147,12 @@ namespace ks
 	void ParticleController::step( Particles& pParticles, float elapsed ) const
 	{
 		const ksU32 numParticles	= pParticles.live_count();
-		ksU32 completionLabel(0);
 		ConstraintConfig ccfg;
 		{
 			ccfg.constraint		= &sParticleFloorConstraint;
 			ccfg.numElements	= numParticles;
 			ccfg.rPositions		= (float*)pParticles.positions.data();
 			ccfg.rVelocities	= (float*)pParticles.velocities.data();
-			ccfg.completionLabel = &completionLabel;
 		}
 		async_context ctx			= CollisionSolver::BeginAsync(pParticles.forces, numParticles, elapsed, &ccfg);
 
