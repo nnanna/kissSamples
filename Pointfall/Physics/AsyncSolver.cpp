@@ -34,6 +34,8 @@
 #include <algorithm>
 #endif
 
+static ksU32 gNumCollisions(0);
+
 namespace ks {
 
 	using namespace mem;
@@ -299,6 +301,9 @@ namespace ks {
 
 				Reset();
 				atomic_and(&mCompletionMarker, 0);
+
+				DEBUG_PRINT("num collisions: %d\n", gNumCollisions);
+				gNumCollisions = 0;
 			}
 		}
 
@@ -411,7 +416,7 @@ namespace ks {
 			}
 			mCompleted.signal();
 
-			//printf("inter collisions: %d\n", total_collisions);
+			atomic_add(&gNumCollisions, total_collisions);
 			return total_collisions;
 		}
 
@@ -458,10 +463,7 @@ namespace ks {
 
 		auto on_complete = [ &ls ](ksU32 num_collisions)
 		{
-			/*if(num_collisions > 0)
-			{
-				DEBUG_PRINT("local_collisions : %d\n", num_collisions);
-			}*/
+			atomic_add(&gNumCollisions, num_collisions);
 			KS_ASSERT(ls.reading() == false);
 			ls.reset();
 			ls.IdleWatch.signal();
@@ -473,9 +475,10 @@ namespace ks {
 		{
 			ConstraintConfig cc = *pConstraint;
 			ls.mConstraintRunning.SetState(true);
-			auto constraint_solver = [cc, &ls]() -> int
+			auto constraint_solver = [cc, &ls]() -> ksU32
 			{
 				ksU32 index(0);
+				ksU32 collisions(0);
 				vec3* rPos = (vec3*)cc.rPositions;
 				vec3* rVel = (vec3*)cc.rVelocities;
 				while (index < cc.numElements)
@@ -486,17 +489,20 @@ namespace ks {
 						const ksU32 rsize = rev - index;
 						memcpy(rPos + index, ls.mPositions + index, rsize * sizeof(vec3));
 						memcpy(rVel + index, ls.mVelocities + index, rsize * sizeof(vec3));
-						cc.constraint->Satisfy(&rPos[index].x, &rVel[index].x, nullptr, rsize);
+						
+						collisions += cc.constraint->Satisfy(&rPos[index].x, &rVel[index].x, nullptr, rsize);
+						
 						index = rev;
 					}
 					if ( index == ls.mRevision && index < cc.numElements )
 						THREAD_SWITCH;											// stall for more submissions
 				}
-				return 0;
+				return collisions;
 			};
 
-			auto on_constraint_complete = [&ls](int unused)
+			auto on_constraint_complete = [&ls](ksU32 num_collisions)
 			{
+				atomic_add(&gNumCollisions, num_collisions);
 				ls.mConstraintRunning.Notify();
 			};
 

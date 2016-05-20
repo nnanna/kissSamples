@@ -7,7 +7,7 @@
 namespace ks
 {
 
-	void customParticleFloorConstraint(float* positions, float* velocities, const float* sizes, int count, const Constraint& ct)
+	size_t customParticleFloorConstraint(float* positions, float* velocities, const float* sizes, int count, const Constraint& ct)
 	{
 #define PARTICLE_CONSTANT_RADIUS	0.2f
 #define PARTICLE_IDLE_CUTOFF		0.001f
@@ -20,6 +20,7 @@ namespace ks
 		vec3* vel			= (vec3*)velocities;
 		vec3& refl			= *(vec3*)&tlsRefl;
 		vec3& floor_damping	= *(vec3*)&tlsDamping;
+		ksU32 numContacts(0);
 
 		for (int i = 0; i < count; ++i, ++vel)
 		{
@@ -30,8 +31,11 @@ namespace ks
 				floor_damping.y = rng.GetFloatBetween(0.2f, 0.4f) - pos[i].y;
 				*vel *= floor_damping;
 				pos[i].y = PARTICLE_CONSTANT_RADIUS;
+				++numContacts;
 			}
 		}
+
+		return numContacts;
 	}
 
 	Constraint CreateParticleFloorConstraint()
@@ -154,10 +158,10 @@ namespace ks
 			ccfg.rPositions		= (float*)pParticles.positions.data();
 			ccfg.rVelocities	= (float*)pParticles.velocities.data();
 		}
-		async_context ctx			= CollisionSolver::BeginAsync(pParticles.forces, numParticles, elapsed, &ccfg);
+		async_context ctx		= CollisionSolver::BeginAsync(pParticles.forces, numParticles, elapsed, &ccfg);
 
-		float halfstep				= elapsed * 0.5f;
-		const vec3 half_a_t			= BaseAcceleration * halfstep;
+		float halfstep			= elapsed * 0.5f;
+		const vec3 half_a_t		= BaseAcceleration * halfstep;
 		vec3 vel, half_accel, pos;
 
 		for (ksU32 i = 0; i < numParticles; ++i)

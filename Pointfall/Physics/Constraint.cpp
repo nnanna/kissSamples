@@ -23,9 +23,9 @@
 
 //namespace ks {
 
-	static void custom_solver(float* positions, float* velocities, const float* sizes, int count, const Constraint& ct)
+	static size_t custom_solver(float* positions, float* velocities, const float* sizes, int count, const Constraint& ct)
 	{
-		ct.custom.customSatisfy(positions, velocities, sizes, count, ct);
+		return ct.custom.customSatisfy(positions, velocities, sizes, count, ct);
 	}
 
 	static SatisfyFn sSolvers[ct_count] =	// TODO: fill
@@ -43,8 +43,8 @@
 	//
 	//////////////////////////////////////////////////////////////////////////
 
-	void Constraint::Satisfy(float* pos3, float* vel3, const float* sizes, int count) const
+	size_t Constraint::Satisfy(float* pos3, float* vel3, const float* sizes, int count) const
 	{
-		sSolvers[mType](pos3, vel3, sizes, count, *this);
+		return sSolvers[mType](pos3, vel3, sizes, count, *this);
 	}
 //}

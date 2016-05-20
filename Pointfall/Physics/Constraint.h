@@ -23,7 +23,7 @@
 
 //namespace ks{
 
-	typedef void(*SatisfyFn)(float* positions, float* velocities, const float* sizes, int count, const struct Constraint& ct);
+	typedef size_t(*SatisfyFn)(float* positions, float* velocities, const float* sizes, int count, const struct Constraint& ct);
 
 	enum ConstraintType
 	{
@@ -41,7 +41,7 @@
 	{
 		ConstraintType mType;	// constraint lists can easily be sorted by type
 
-		void Satisfy(float* pos3, float* vel3, const float* sizes, int count) const;
+		size_t Satisfy(float* pos3, float* vel3, const float* sizes, int count) const;
 
 		union
 		{
