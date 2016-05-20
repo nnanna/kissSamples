@@ -73,6 +73,7 @@ namespace ks {
 		{
 			mVelocities = mPositions = nullptr;
 			mIndex = mCapacity = mRevision = 0;
+			mConstraintRunning = false;
 		}
 
 		void init(StackBuffer& stack, size_t pNumElements)
@@ -101,19 +102,16 @@ namespace ks {
 				{
 					THREAD_SWITCH;
 				}
-				else
+				while (mIndex < mRevision)
 				{
-					while (mIndex < mRevision )
-					{
-						dist.distance	= mPositions[ mIndex ].LengthSq();
-						dist.index		= mIndex;
+					dist.distance = mPositions[mIndex].LengthSq();
+					dist.index = mIndex;
 #if USE_STL_SORT
-						mSortedDistances[mIndex] = dist;
+					mSortedDistances[mIndex] = dist;
 #else
-						binary_insert_sorted( mSortedDistances, mIndex, dist, descending_sort_predicate<DistanceIndex>() );
+					binary_insert_sorted(mSortedDistances, mIndex, dist, descending_sort_predicate<DistanceIndex>());
 #endif
-						++mIndex;
-					}
+					++mIndex;
 				}
 			}
 #if USE_STL_SORT
@@ -178,8 +176,9 @@ namespace ks {
 		vec3*			mVelocities;
 		ksU32			mRevision;
 		Semaphore		IdleWatch;
+		bool			mConstraintRunning;
 	private:
-		LocalSolver() : mVelocities(nullptr), mPositions(nullptr), mRevision(0), mCapacity(0), mIndex(0)
+		LocalSolver() : mVelocities(nullptr), mPositions(nullptr), mRevision(0), mCapacity(0), mIndex(0), mConstraintRunning(false)
 		{}
 		LocalSolver(const LocalSolver&) = delete;
 		LocalSolver& operator=(const LocalSolver&) = delete;
@@ -456,6 +455,11 @@ namespace ks {
 
 			ksU32 numCollisions = ls.resolveCollisions(pForceResults.data(), elapsed);
 
+			while (ls.mConstraintRunning)
+			{
+				THREAD_SWITCH;
+			}
+
 			gSolver.Release(stack);
 
 			return numCollisions;
@@ -480,6 +484,7 @@ namespace ks {
 		{
 			ConstraintConfig cc = *pConstraint;
 			*cc.completionLabel = 0x0;
+			ls.mConstraintRunning = true;
 			auto constraint_solver = [cc, &ls]() -> ksU32*
 			{
 				ksU32 index(0);
@@ -502,9 +507,10 @@ namespace ks {
 				return cc.completionLabel;
 			};
 
-			auto on_constraint_complete = [](ksU32* cLabel)
+			auto on_constraint_complete = [&ls](ksU32* cLabel)
 			{
 				*cLabel = 0x1;
+				ls.mConstraintRunning = false;
 			};
 
 			constraintJob = scheduler->QueueJob(constraint_solver, on_constraint_complete, "ConstraintSolver");
