@@ -36,9 +36,20 @@
 
 static ksU32 gNumCollisions(0);
 
+enum BatchState
+{
+	bs_wait,
+	bs_ready,
+	bs_green
+};
+
+
 namespace ks {
 
 	using namespace mem;
+
+	static ReadWriteLock sRWLock;
+	static std::unordered_map<size_t, LocalSolver*> sLocalSolverMap;
 
 	struct DistanceIndex		// the next best thing to space partitioning
 	{
@@ -53,9 +64,6 @@ namespace ks {
 	{
 		static LocalSolver* Acquire(void* pClientAddress)
 		{
-			static ReadWriteLock sRWLock;
-			static std::unordered_map<size_t, LocalSolver*> sLocalSolverMap;
-
 			size_t key = size_t(pClientAddress);
 			
 			auto rGuard = sRWLock.Read();
@@ -229,12 +237,16 @@ namespace ks {
 					index = mSize;
 					mSize += pCapacity;
 				}
+				else	// cycle round
+				{
+					index = 0;
+					mSize = pCapacity;
+				}
 			}
 
 			StackBuffer b(nullptr, 0);
 			if (index >= 0)
 			{
-				atomic_increment(&mMemClients);
 				b = StackBuffer(mBuffer + index, pCapacity);
 			}
 			else
@@ -245,15 +257,14 @@ namespace ks {
 			return b;
 		}
 
-		void Release(StackBuffer& pBuffer)
-		{
-			atomic_decrement(&mMemClients);
-		}
-
-		void Reset()							{ mSize = 0; mQueries.clear(); mNumQueries = 0; }
+		void Reset()							{ mQueries.clear(); mNumQueries = 0; }
 
 		void Submit(LocalSolver& pLS, vec3* pResults, float elapsed)
 		{
+			while (mCompletionMarker == bs_wait)
+			{
+				THREAD_SWITCH;
+			}
 			memset(pResults, 0, (pLS.capacity() * sizeof(vec3)));
 			local_query lq =
 			{
@@ -284,11 +295,8 @@ namespace ks {
 
 		void AwaitCompletion()
 		{
-			if (mCompletionMarker)
+			if (atomic_compare_and_swap(&mCompletionMarker, bs_green, bs_wait) == bs_green)
 			{
-				while (mMemClients != 0)
-					THREAD_SWITCH;
-
 				int completedQueries	= 1;			// the first query doesn't count
 				int numQueries			= mNumQueries;
 
@@ -300,7 +308,7 @@ namespace ks {
 				}
 
 				Reset();
-				atomic_and(&mCompletionMarker, 0);
+				atomic_set(&mCompletionMarker, bs_ready);
 
 				DEBUG_PRINT("num collisions: %d\n", gNumCollisions);
 				gNumCollisions = 0;
@@ -314,14 +322,21 @@ namespace ks {
 
 		void EndBatch()
 		{
-			mCompletionMarker = true;
+			mCompletionMarker = bs_green;
 		}
 
 
-		static GlobalSolver& Get()
+		static GlobalSolver& Get();
+
+		GlobalSolver() : mSize(0), mCompletionMarker(0)
 		{
-			static GlobalSolver	sGlobalSolver;
-			return sGlobalSolver;
+			mBuffer			= new char[ SOLVER_MEM_CAPACITY ];
+			mQueries.reserve(16);
+		}
+
+		~GlobalSolver()
+		{
+			delete[] mBuffer;
 		}
 
 	private:
@@ -334,17 +349,6 @@ namespace ks {
 			ksU32			capacity;
 			LocalSolver*	local_solver;
 		};
-
-		GlobalSolver() : mSize(0), mMemClients(0)
-		{
-			mBuffer			= new char[ SOLVER_MEM_CAPACITY ];
-			mQueries.reserve(16);
-		}
-
-		~GlobalSolver()
-		{
-			delete[] mBuffer;
-		}
 
 		ksU32 resolveInterQueryCollisions(float elapsed, ksU32 pQueryIndex)
 		{
@@ -423,13 +427,18 @@ namespace ks {
 		ReadWriteLock		mRWLock;
 		char*				mBuffer;
 		ksU32				mSize;
-		ksU32				mMemClients;
 		ksU32				mNumQueries;
-		bool				mCompletionMarker;
+		ksU32				mCompletionMarker;
 		Array<local_query>	mQueries;
 		Semaphore			mCompleted;
 	};
 
+	static GlobalSolver	sGlobalSolver;
+
+	GlobalSolver& GlobalSolver::Get()
+	{
+		return sGlobalSolver;
+	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// CollisionSolver
@@ -455,8 +464,6 @@ namespace ks {
 			ksU32 numCollisions = ls.resolveCollisions(pForceResults.data(), elapsed);
 
 			ls.mConstraintRunning.Wait();
-
-			gSolver.Release(stack);
 
 			return numCollisions;
 		};

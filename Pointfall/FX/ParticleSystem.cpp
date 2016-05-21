@@ -83,43 +83,70 @@ void ParticleSystem::destroy(size_t pEmitterID)
 }
 
 
+#define CONCURRENT_FX_UPDATE	0
 
 void ParticleSystem::step(float elapsed)
 {
-	ks::GLRenderer* renderer = Service<ks::GLRenderer>::Get();
+#if CONCURRENT_FX_UPDATE
+	ks::JobScheduler* scheduler = Service<ks::JobScheduler>::Get();
+
+	ks::Array<ks::JobHandle> particleJobs( mParticleGroups.size(), ks::JobHandle() );
+#endif
 
 	ks::CollisionSolver::BeginBatch();
 
+	ksU32 jobIndex(0);
 	for (auto& i : mParticleGroups)
 	{
 		auto& em = *i.first;
 		auto& p = *i.second;
 		auto& c = em.mFXID < mControllers.size() ? mControllers[ em.mFXID ] : sDefaultController;
 
+#if CONCURRENT_FX_UPDATE
+		particleJobs[ jobIndex++ ] = scheduler->QueueJob(
+			[&c, &p, &em, elapsed]() -> ksU32
+			{
+				c.prune(p, elapsed);
+				c.emit(em, p, elapsed);
+				c.step(p, elapsed);
+				return 0;
+			},
+
+			[&i, this](ksU32 unused)
+			{
+				auto& p = *i.second;
+				if (p.live_count())
+				{
+					auto rg = mRenderGroups[i.first];
+					rg->numIndices = p.live_count();
+
+					Service<ks::GLRenderer>::Get()->addRenderData(rg);
+				}
+			},
+			"FX step"
+		);
+
+#else
 		c.prune(p, elapsed);
 		c.emit(em, p, elapsed);
 		c.step(p, elapsed);
-
-				
-		//Service<ks::JobScheduler>::Get()->QueueJob( [&c, &p, elapsed]() -> ksU32
-		//	{
-		//		/*c.prune(p, elapsed);
-		//		c.emit(em, p, elapsed);*/
-		//		c.step(p, elapsed);
-		//		return 0;
-		//	},
-		//	"FX step"
-		//);
-		
-
 		if (p.live_count())
 		{
 			auto rg = mRenderGroups[i.first];
 			rg->numIndices = p.live_count();
 
-			renderer->addRenderData(rg);
+			Service<ks::GLRenderer>::Get()->addRenderData(rg);
 		}
+#endif
 	}
+
+#if CONCURRENT_FX_UPDATE
+	for (auto& jh : particleJobs)
+	{
+		jh.Sync();
+	}
+#endif
+
 	ks::CollisionSolver::EndBatch();
 
 }
