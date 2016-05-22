@@ -168,7 +168,7 @@ bool GLApplication::init(int argc, char** argv)
 
 	CameraManager::createCamera();
 
-	mJobScheduler = new ks::JobScheduler(4, 7);		// 4 workers, 7 jobs max, multi-producer
+	mJobScheduler = new ks::JobScheduler(8, 63);		// 8 workers, 63 jobs max, multi-producer
 	Service<ks::JobScheduler>::Register( mJobScheduler );
 
 	gFontMaterial.SetDiffuse(0, 0, 0);

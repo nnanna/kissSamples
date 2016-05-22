@@ -226,6 +226,7 @@ namespace ks {
 	struct GlobalSolver
 	{
 #define SOLVER_MEM_CAPACITY						5 * MEGABYTE
+#define	SOLVER_QUERY_CAPACITY					16
 
 		StackBuffer FrameBuffer(ksU32 pCapacity)
 		{
@@ -257,7 +258,7 @@ namespace ks {
 			return b;
 		}
 
-		void Reset()							{ mQueries.clear(); mNumQueries = 0; }
+		void Reset()							{ mNumQueries = 0; }
 
 		void Submit(LocalSolver& pLS, vec3* pResults, float elapsed)
 		{
@@ -276,18 +277,20 @@ namespace ks {
 				&pLS
 			};
 
-			ksU32 numQueries = atomic_increment(&mNumQueries);
-			{
-				auto wGuard = mRWLock.Write();
-				mQueries.push_back(lq);
-			}
+			const ksU32 queryIndex = atomic_increment(&mNumQueries) - 1;
 
-			if (numQueries > 1)
+			if (queryIndex == 0)					// ignore the first query
 			{
+				mQueries[queryIndex] = lq;
+			}
+			else if(queryIndex < SOLVER_QUERY_CAPACITY)
+			{
+				mQueries[queryIndex] = lq;
+
 				Service<JobScheduler>::Get()->QueueJob(
-					[this, elapsed, numQueries]() -> ksU32
+					[this, elapsed, queryIndex]() -> ksU32
 					{
-						return resolveInterQueryCollisions( elapsed, numQueries );
+						return resolveInterQueryCollisions( elapsed, queryIndex );
 					},
 					"GlobalSolver");
 			}
@@ -325,13 +328,11 @@ namespace ks {
 			mCompletionMarker = bs_green;
 		}
 
-
-		static GlobalSolver& Get();
-
 		GlobalSolver() : mSize(0), mCompletionMarker(0)
 		{
-			mBuffer			= new char[ SOLVER_MEM_CAPACITY ];
-			mQueries.reserve(16);
+			mBuffer				= new char[ SOLVER_MEM_CAPACITY ];
+			local_query qempty	= {};
+			mQueries.resize(SOLVER_QUERY_CAPACITY, qempty);
 		}
 
 		~GlobalSolver()
@@ -362,10 +363,10 @@ namespace ks {
 			local_query qj;
 			{
 				auto rGuard = mRWLock.Read();
-				qj = mQueries[pQueryIndex - 1];
+				qj = mQueries[pQueryIndex];
 			}
 
-			for (ksU32 i = 0; i + 1 < pQueryIndex; ++i)
+			for (ksU32 i = 0; i < pQueryIndex; ++i)
 			{
 				local_query qi;
 				{
@@ -435,11 +436,6 @@ namespace ks {
 
 	static GlobalSolver	sGlobalSolver;
 
-	GlobalSolver& GlobalSolver::Get()
-	{
-		return sGlobalSolver;
-	}
-
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	// CollisionSolver
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -453,13 +449,12 @@ namespace ks {
 
 		auto solver = [&pForceResults, &ls, pNumElements, elapsed]() -> ksU32
 		{
-			auto& gSolver		= GlobalSolver::Get();
-			StackBuffer stack	= gSolver.FrameBuffer( LocalSolver::AllocSize(pNumElements) );
+			StackBuffer stack	= sGlobalSolver.FrameBuffer( LocalSolver::AllocSize(pNumElements) );
 			ls.init(stack, pNumElements);
 
 			ls.asyncQuerySort();
 
-			gSolver.Submit(ls, pForceResults.data(), elapsed);
+			sGlobalSolver.Submit(ls, pForceResults.data(), elapsed);
 
 			ksU32 numCollisions = ls.resolveCollisions(pForceResults.data(), elapsed);
 
@@ -532,16 +527,16 @@ namespace ks {
 		while (pSolver.in_progress())
 			pSolver.IdleWatch.wait();
 
-		GlobalSolver::Get().AwaitCompletion();
+		sGlobalSolver.AwaitCompletion();
 	}
 
 	void CollisionSolver::BeginBatch()
 	{
-		GlobalSolver::Get().BeginBatch();
+		sGlobalSolver.BeginBatch();
 	}
 
 	void CollisionSolver::EndBatch()
 	{
-		GlobalSolver::Get().EndBatch();
+		sGlobalSolver.EndBatch();
 	}
 }
