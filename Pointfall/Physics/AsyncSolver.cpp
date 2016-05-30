@@ -36,14 +36,6 @@
 
 static ksU32 gNumCollisions(0);
 
-enum BatchState
-{
-	bs_wait,
-	bs_ready,
-	bs_green
-};
-
-
 namespace ks {
 
 	using namespace mem;
@@ -81,8 +73,8 @@ namespace ks {
 
 		void reset()
 		{
-			mVelocities = mPositions = nullptr;
 			mIndex = mCapacity = mRevision = 0;
+			mVelocities = mPositions = nullptr;
 		}
 
 		void init(StackBuffer& stack, size_t pNumElements)
@@ -94,11 +86,7 @@ namespace ks {
 			mCapacity			= pNumElements;
 		}
 
-		bool in_progress() const	{ return reading() || solving(); }
-
 		bool reading() const		{ return mCapacity > 0 && mIndex < mCapacity; }
-
-		bool solving() const		{ return mIndex != 0; }
 
 		ksU32 capacity() const		{ return mCapacity; }
 
@@ -109,7 +97,7 @@ namespace ks {
 			{
 				if (mIndex == mRevision)
 				{
-					THREAD_SWITCH;
+					ksYieldThread;
 				}
 				while (mIndex < mRevision)
 				{
@@ -142,6 +130,7 @@ namespace ks {
 
 				while ( (di.distance - dk.distance) <= COLLISION_RADIUS_SQ )	// don't need no fabs(), descending order sorted
 				{
+					KS_ASSERT(di.index < mCapacity && dk.index < mCapacity);
 					norm = mPositions[di.index] - mPositions[dk.index];
 					if (norm.LengthSq() <= COLLISION_RADIUS_SQ)
 					{
@@ -188,7 +177,9 @@ namespace ks {
 		Event			mConstraintRunning;
 	private:
 		LocalSolver() : mVelocities(nullptr), mPositions(nullptr), mRevision(0), mCapacity(0), mIndex(0), mConstraintRunning(false)
-		{}
+		{
+			IdleWatch.signal();		// init to signaled state so the first AwaitQueryCompletion passes.
+		}
 		LocalSolver(const LocalSolver&) = delete;
 		LocalSolver& operator=(const LocalSolver&) = delete;
 		ksU32 mCapacity;
@@ -211,7 +202,7 @@ namespace ks {
 	{
 		while (mSolver.capacity() == 0)
 		{
-			THREAD_SWITCH;			// wait for solver workspace to be allocated
+			ksYieldThread;			// wait for solver workspace to be allocated
 		}
 
 		mSolver.mPositions[pResultIndex]	= pPos;
@@ -225,7 +216,7 @@ namespace ks {
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	struct GlobalSolver
 	{
-#define SOLVER_MEM_CAPACITY						5 * MEGABYTE
+#define SOLVER_MEM_CAPACITY						15 * MEGABYTE
 #define	SOLVER_QUERY_CAPACITY					16
 
 		StackBuffer FrameBuffer(ksU32 pCapacity)
@@ -248,6 +239,7 @@ namespace ks {
 			StackBuffer b(nullptr, 0);
 			if (index >= 0)
 			{
+				atomic_increment(&mNumQueries);
 				b = StackBuffer(mBuffer + index, pCapacity);
 			}
 			else
@@ -258,14 +250,13 @@ namespace ks {
 			return b;
 		}
 
-		void Reset()							{ mNumQueries = 0; }
+		void Reset()
+		{
+			mNumQueries = mQueryIDs = 0;
+		}
 
 		void Submit(LocalSolver& pLS, vec3* pResults, float elapsed)
 		{
-			while (mCompletionMarker == bs_wait)
-			{
-				THREAD_SWITCH;
-			}
 			memset(pResults, 0, (pLS.capacity() * sizeof(vec3)));
 			local_query lq =
 			{
@@ -277,16 +268,16 @@ namespace ks {
 				&pLS
 			};
 
-			const ksU32 queryIndex = atomic_increment(&mNumQueries) - 1;
-
-			if (queryIndex == 0)					// ignore the first query
+			ksU32 queryIndex(0);
 			{
-				mQueries[queryIndex] = lq;
+				auto wLock = mRWLock.Write();
+				queryIndex = mQueryIDs++;
+				if (queryIndex < SOLVER_QUERY_CAPACITY)
+					mQueries[queryIndex] = lq;
 			}
-			else if(queryIndex < SOLVER_QUERY_CAPACITY)
-			{
-				mQueries[queryIndex] = lq;
 
+			if(queryIndex > 0 && queryIndex < SOLVER_QUERY_CAPACITY)
+			{
 				Service<JobScheduler>::Get()->QueueJob(
 					[this, elapsed, queryIndex]() -> ksU32
 					{
@@ -294,41 +285,40 @@ namespace ks {
 					},
 					"GlobalSolver");
 			}
+			else if(queryIndex == 0)
+			{
+				mQueryCompleted.signal();		// the first query doesn't need a global solver
+			}
 		}
 
 		void AwaitCompletion()
 		{
-			if (atomic_compare_and_swap(&mCompletionMarker, bs_green, bs_wait) == bs_green)
+			int completedQueries(0);
+			int numQueries = mNumQueries;
+
+			while (numQueries - completedQueries > 0)
 			{
-				int completedQueries	= 1;			// the first query doesn't count
-				int numQueries			= mNumQueries;
-
-				while (numQueries - completedQueries > 0)
-				{
-					mCompleted.wait();
-					atomic_increment((unsigned*)&completedQueries);
-					numQueries = mNumQueries;
-				}
-
-				Reset();
-				atomic_set(&mCompletionMarker, bs_ready);
-
-				DEBUG_PRINT("num collisions: %d\n", gNumCollisions);
-				gNumCollisions = 0;
+				mQueryCompleted.wait();
+				++completedQueries;
+				numQueries = mNumQueries;
 			}
+
+			KS_ASSERT(mNumQueries == mQueryIDs && mQueryIDs == completedQueries);
+			Reset();
+
+			DEBUG_PRINT("num collisions: %d\n", gNumCollisions);
+			gNumCollisions = 0;
 		}
 
 		void BeginBatch()
 		{
-			//AwaitCompletion();	// best to delay sync till new local queries are ready -> in AwaitQueryCompletion()
+			AwaitCompletion();
 		}
 
 		void EndBatch()
-		{
-			mCompletionMarker = bs_green;
-		}
+		{}
 
-		GlobalSolver() : mSize(0), mCompletionMarker(0)
+		GlobalSolver() : mSize(0), mNumQueries(0), mQueryIDs(0)
 		{
 			mBuffer				= new char[ SOLVER_MEM_CAPACITY ];
 			local_query qempty	= {};
@@ -351,7 +341,7 @@ namespace ks {
 			LocalSolver*	local_solver;
 		};
 
-		ksU32 resolveInterQueryCollisions(float elapsed, ksU32 pQueryIndex)
+		ksU32 resolveInterQueryCollisions(float elapsed, const ksU32 pQueryIndex)
 		{
 #define G_COLLISION_RADIUS_SQ		1.2f
 #define G_MAX_PER_ENTITY_COLLISIONS	2
@@ -362,7 +352,7 @@ namespace ks {
 
 			local_query qj;
 			{
-				auto rGuard = mRWLock.Read();
+				//auto rGuard = mRWLock.Read();
 				qj = mQueries[pQueryIndex];
 			}
 
@@ -370,7 +360,7 @@ namespace ks {
 			{
 				local_query qi;
 				{
-					auto rGuard = mRWLock.Read();
+					//auto rGuard = mRWLock.Read();
 					qi = mQueries[i];
 				}
 
@@ -419,7 +409,7 @@ namespace ks {
 					}
 				}
 			}
-			mCompleted.signal();
+			mQueryCompleted.signal();
 
 			atomic_add(&gNumCollisions, total_collisions);
 			return total_collisions;
@@ -428,10 +418,10 @@ namespace ks {
 		ReadWriteLock		mRWLock;
 		char*				mBuffer;
 		ksU32				mSize;
+		ksU32				mQueryIDs;
 		ksU32				mNumQueries;
-		ksU32				mCompletionMarker;
 		Array<local_query>	mQueries;
-		Semaphore			mCompleted;
+		Semaphore			mQueryCompleted;
 	};
 
 	static GlobalSolver	sGlobalSolver;
@@ -458,7 +448,7 @@ namespace ks {
 
 			ksU32 numCollisions = ls.resolveCollisions(pForceResults.data(), elapsed);
 
-			ls.mConstraintRunning.Wait();
+			ls.mConstraintRunning.Wait();	// don't release StackBuffer while constraint's still running
 
 			return numCollisions;
 		};
@@ -497,7 +487,7 @@ namespace ks {
 						index = rev;
 					}
 					if ( index == ls.mRevision && index < cc.numElements )
-						THREAD_SWITCH;											// stall for more submissions
+						ksYieldThread;											// stall for more submissions
 				}
 				return collisions;
 			};
@@ -524,10 +514,7 @@ namespace ks {
 
 	void CollisionSolver::AwaitQueryCompletion(LocalSolver& pSolver)
 	{
-		while (pSolver.in_progress())
-			pSolver.IdleWatch.wait();
-
-		sGlobalSolver.AwaitCompletion();
+		pSolver.IdleWatch.wait();
 	}
 
 	void CollisionSolver::BeginBatch()

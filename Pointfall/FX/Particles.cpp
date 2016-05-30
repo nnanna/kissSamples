@@ -15,7 +15,7 @@ namespace ks
 		// simple col-det & response - only considers plane at origin
 		static RNG rng;
 		static ks_thread_local float tlsRefl[3];
-		static ks_thread_local float tlsDamping[3] = { 0.995f, 0.4f, 0.995f };	// x,z planar friction, (y) restitution
+		static ks_thread_local float tlsDamping[3] = { 0.99f, 0.4f, 0.99f };	// x,z planar friction, (y) restitution
 		vec3* pos			= (vec3*)positions;
 		vec3* vel			= (vec3*)velocities;
 		vec3& refl			= *(vec3*)&tlsRefl;
@@ -28,7 +28,7 @@ namespace ks
 			{
 				vel->reflect(vec3::UNIT_Y, refl);
 				*vel = refl;
-				floor_damping.y = rng.GetFloatBetween(0.2f, 0.4f) - pos[i].y;
+				floor_damping.y = rng.GetFloatBetween(0.4f, 0.6f) - pos[i].y;
 				*vel *= floor_damping;
 				pos[i].y = PARTICLE_CONSTANT_RADIUS;
 				++numContacts;
@@ -176,15 +176,11 @@ namespace ks
 			vel += half_accel;
 			pos += (vel * elapsed);
 			vel += half_accel;
-
-			//sParticleFloorConstraint.Satisfy(&pos.x, &vel.x, nullptr, 1);	// TODO: make batched & async
 			
 			ctx.SubmitQuery( i, pos, vel );
-			//pParticles.velocities[i] = vel;
-			//pParticles.positions[i] = pos;
 		}
 
-		ctx.SyncConstraints();
+		//ctx.SyncConstraints();
 	}
 
 }	// namespace ks

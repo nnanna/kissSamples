@@ -12,6 +12,7 @@
 #include <RenderEngine\RenderData.h>
 #include <AppLayer\GLApplication.h>
 #include <Concurrency\JobScheduler.hpp>
+#include <Memory\ThreadStackAllocator.h>
 
 typedef ks::Matrix	Matrix;
 typedef ks::vec3	vec3;
@@ -83,19 +84,20 @@ void ParticleSystem::destroy(size_t pEmitterID)
 }
 
 
-#define CONCURRENT_FX_UPDATE	0
+#define CONCURRENT_FX_UPDATE	1
 
 void ParticleSystem::step(float elapsed)
 {
 #if CONCURRENT_FX_UPDATE
 	ks::JobScheduler* scheduler = Service<ks::JobScheduler>::Get();
 
-	ks::Array<ks::JobHandle> particleJobs( mParticleGroups.size(), ks::JobHandle() );
+	ks::mem::ThreadStackAllocator stack(mParticleGroups.size() * sizeof(ks::JobHandle));
+	ks::JobHandle* particleJobs = (ks::JobHandle*)stack.allocate();
+	ksU32 jobIndex(0);
 #endif
 
 	ks::CollisionSolver::BeginBatch();
 
-	ksU32 jobIndex(0);
 	for (auto& i : mParticleGroups)
 	{
 		auto& em = *i.first;
@@ -103,16 +105,16 @@ void ParticleSystem::step(float elapsed)
 		auto& c = em.mFXID < mControllers.size() ? mControllers[ em.mFXID ] : sDefaultController;
 
 #if CONCURRENT_FX_UPDATE
-		particleJobs[ jobIndex++ ] = scheduler->QueueJob(
-			[&c, &p, &em, elapsed]() -> ksU32
+		particleJobs[ jobIndex ] = scheduler->QueueJob(
+			[&c, &p, &em, elapsed, jobIndex]() -> int
 			{
 				c.prune(p, elapsed);
 				c.emit(em, p, elapsed);
 				c.step(p, elapsed);
-				return 0;
+				return jobIndex;
 			},
 
-			[&i, this](ksU32 unused)
+			[&i, this](int pJobIndex)
 			{
 				auto& p = *i.second;
 				if (p.live_count())
@@ -125,6 +127,7 @@ void ParticleSystem::step(float elapsed)
 			},
 			"FX step"
 		);
+		++jobIndex;
 
 #else
 		c.prune(p, elapsed);
@@ -141,10 +144,8 @@ void ParticleSystem::step(float elapsed)
 	}
 
 #if CONCURRENT_FX_UPDATE
-	for (auto& jh : particleJobs)
-	{
-		jh.Sync();
-	}
+	for (ksU32 j = 0; j < jobIndex; ++j)
+		particleJobs[j].Sync();
 #endif
 
 	ks::CollisionSolver::EndBatch();
