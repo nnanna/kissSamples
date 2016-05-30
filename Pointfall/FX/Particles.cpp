@@ -180,7 +180,7 @@ namespace ks
 			ctx.SubmitQuery( i, pos, vel );
 		}
 
-		//ctx.SyncConstraints();
+		ctx.SyncConstraints();
 	}
 
 }	// namespace ks
