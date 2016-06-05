@@ -13,6 +13,7 @@ namespace ks
 	struct Emitter;
 	struct Material;
 	class RenderData;
+	class JobGroup;
 }
 
 typedef ksU32			FXID;
@@ -46,6 +47,7 @@ private:
 
 	ksU32					mUID;
 	Material*				mMaterial;
+	ks::JobGroup*			mJobStream;
 
 	std::map<ks::Emitter*, ks::Particles*>	mParticleGroups;
 	std::map<ks::Emitter*, RenderData*>		mRenderGroups;

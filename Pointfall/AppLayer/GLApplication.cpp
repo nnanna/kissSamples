@@ -168,7 +168,7 @@ bool GLApplication::init(int argc, char** argv)
 
 	CameraManager::createCamera();
 
-	mJobScheduler = new ks::JobScheduler(8, 63);		// 8 workers, 63 jobs max, multi-producer
+	mJobScheduler = new ks::JobScheduler(4, 63);		// 4 workers, 63 jobs max, multi-producer
 	Service<ks::JobScheduler>::Register( mJobScheduler );
 
 	gFontMaterial.SetDiffuse(0, 0, 0);
@@ -336,8 +336,6 @@ void GLApplication::go()
 
 void GLApplication::quit()
 {
-	delete mJobScheduler;
-
 	for(size_t i = 0; i < mParticleSubsytems.size(); i++)
 	{
 		delete mParticleSubsytems[i];
@@ -351,6 +349,8 @@ void GLApplication::quit()
 	mSceneObjects.clear();
 
 	CameraManager::destroy();
+
+	delete mJobScheduler;
 
 	delete mRenderer;
 }

@@ -31,6 +31,7 @@ namespace ks
 {
 	struct vec3;
 	struct LocalSolver;
+	class JobGroup;
 
 	struct ConstraintConfig
 	{
@@ -56,7 +57,7 @@ namespace ks
 	public:
 		static async_context BeginAsync( Array<vec3>& pForceResults, ksU32 pNumElements, float elapsed, const ConstraintConfig* pConstraint = nullptr );
 		static void AwaitQueryCompletion( Array<vec3>& pForceResults );
-		static void BeginBatch();
+		static void BeginBatch(JobGroup* pJobStream = nullptr);
 		static void EndBatch();
 	private:
 		static void AwaitQueryCompletion(LocalSolver& pSolver);

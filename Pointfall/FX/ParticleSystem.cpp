@@ -1,5 +1,6 @@
 
 
+#define CONCURRENT_FX_UPDATE	1
 
 #include "ParticleSystem.h"
 #include <Service.h>
@@ -11,23 +12,33 @@
 #include <RenderEngine\GLRenderer.h>
 #include <RenderEngine\RenderData.h>
 #include <AppLayer\GLApplication.h>
-#include <Concurrency\JobScheduler.hpp>
-#include <Memory\ThreadStackAllocator.h>
+#if CONCURRENT_FX_UPDATE
+#include <Concurrency\JobGroup.h>
+#endif
+
+
 
 typedef ks::Matrix	Matrix;
 typedef ks::vec3	vec3;
 
 static const ks::ParticleController	sDefaultController;
 
-ParticleSystem::ParticleSystem() : mMaterial( nullptr )
+ParticleSystem::ParticleSystem() : mMaterial(nullptr), mJobStream(nullptr)
 {
 	VRegister();
+#if CONCURRENT_FX_UPDATE
+	mJobStream = ks::JobGroup::create<16>( ks::JobGroup::JG_NEEDS_DEFERRED_QUEUE );
+#endif
 }
 
 //=================================================================================================================
 
 ParticleSystem::~ParticleSystem()
 {
+#if CONCURRENT_FX_UPDATE
+	ks::JobGroup::destroy(mJobStream);
+#endif
+
 	for (auto& i : mRenderGroups)
 		delete i.second;
 
@@ -84,19 +95,15 @@ void ParticleSystem::destroy(size_t pEmitterID)
 }
 
 
-#define CONCURRENT_FX_UPDATE	1
-
 void ParticleSystem::step(float elapsed)
 {
 #if CONCURRENT_FX_UPDATE
-	ks::JobScheduler* scheduler = Service<ks::JobScheduler>::Get();
-
-	ks::mem::ThreadStackAllocator stack(mParticleGroups.size() * sizeof(ks::JobHandle));
-	ks::JobHandle* particleJobs = (ks::JobHandle*)stack.allocate();
-	ksU32 jobIndex(0);
+	ksU32 numJobs(0);
+	ks::CollisionSolver::BeginBatch(mJobStream);
+#else
+	ks::CollisionSolver::BeginBatch();
 #endif
 
-	ks::CollisionSolver::BeginBatch();
 
 	for (auto& i : mParticleGroups)
 	{
@@ -105,30 +112,26 @@ void ParticleSystem::step(float elapsed)
 		auto& c = em.mFXID < mControllers.size() ? mControllers[ em.mFXID ] : sDefaultController;
 
 #if CONCURRENT_FX_UPDATE
-		particleJobs[ jobIndex ] = scheduler->QueueJob(
-			[&c, &p, &em, elapsed, jobIndex]() -> int
+		mJobStream->Add(
+			[this, &c, &p, &em, elapsed]() -> int
 			{
 				c.prune(p, elapsed);
 				c.emit(em, p, elapsed);
 				c.step(p, elapsed);
-				return jobIndex;
-			},
 
-			[&i, this](int pJobIndex)
-			{
-				auto& p = *i.second;
 				if (p.live_count())
 				{
-					auto rg = mRenderGroups[i.first];
+					auto rg = mRenderGroups[&em];
 					rg->numIndices = p.live_count();
 
 					Service<ks::GLRenderer>::Get()->addRenderData(rg);
 				}
+
+				return 0;
 			},
 			"FX step"
 		);
-		++jobIndex;
-
+		++numJobs;
 #else
 		c.prune(p, elapsed);
 		c.emit(em, p, elapsed);
@@ -144,8 +147,7 @@ void ParticleSystem::step(float elapsed)
 	}
 
 #if CONCURRENT_FX_UPDATE
-	for (ksU32 j = 0; j < jobIndex; ++j)
-		particleJobs[j].Sync();
+	mJobStream->Sync( numJobs * 3 );	// each job generates 3 others but only 2 local solvers, the global one can run till the next frame.
 #endif
 
 	ks::CollisionSolver::EndBatch();
