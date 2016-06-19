@@ -11,6 +11,7 @@
 #include <RenderEngine\Material.h>
 #include <RenderEngine\GLRenderer.h>
 #include <RenderEngine\RenderData.h>
+#include <RenderEngine\GPUBuffer.h>
 #include <AppLayer\GLApplication.h>
 #if CONCURRENT_FX_UPDATE
 #include <Concurrency\JobGroup.h>
@@ -58,24 +59,25 @@ FXID ParticleSystem::createController(ks::ParticleController& pDesc, const char*
 }
 
 
-size_t ParticleSystem::spawn(ks::Emitter& pDesc)
+uintptr_t ParticleSystem::spawn(ks::Emitter& pDesc)
 {
 	ks::Emitter* em		= new ks::Emitter(pDesc);
 	ks::Particles* p	= new ks::Particles(em->mMaxParticles);
 	mParticleGroups[em] = p;
 	
-	RenderData* rg		= new RenderData( p->positions.data(), nullptr, Matrix::IDENTITY );
+	RenderData* rg		= new RenderData( nullptr, Matrix::IDENTITY );
 	rg->vertexSize		= 3;
 	rg->renderMode		= ks::ePoints;
 	rg->stride			= sizeof(vec3);
 	rg->material		= mMaterial;
+	rg->mGPUBuffer		= ks::GPUBuffer::create<vec3>( em->mMaxParticles, GL_ARRAY_BUFFER, GL_DYNAMIC_DRAW );
 	
 	mRenderGroups[em]	= rg;
 
-	return size_t(em);
+	return uintptr_t(em);
 }
 
-void ParticleSystem::destroy(size_t pEmitterID)
+void ParticleSystem::destroy(uintptr_t pEmitterID)
 {
 	ks::Emitter* em = reinterpret_cast<ks::Emitter*>(pEmitterID);
 	auto rgi = mRenderGroups.find(em);
@@ -98,7 +100,7 @@ void ParticleSystem::destroy(size_t pEmitterID)
 void ParticleSystem::step(float elapsed)
 {
 #if CONCURRENT_FX_UPDATE
-	ksU32 numJobs(0);
+	mJobStream->Sync();								// complete existing jobs first
 	ks::CollisionSolver::BeginBatch(mJobStream);
 #else
 	ks::CollisionSolver::BeginBatch();
@@ -112,6 +114,20 @@ void ParticleSystem::step(float elapsed)
 		auto& c = em.mFXID < mControllers.size() ? mControllers[ em.mFXID ] : sDefaultController;
 
 #if CONCURRENT_FX_UPDATE
+		if (p.live_count())							// upload previous frame's positions to GPU - a frame's latency is very acceptable
+		{
+			auto rg = mRenderGroups[&em];
+			rg->numIndices = p.live_count();
+
+			auto& vbo = *rg->mGPUBuffer;
+
+			vec3* buffer = vbo.map<vec3>(rg->numIndices);
+			memcpy(buffer, p.positions.data(), rg->numIndices * sizeof(vec3));
+			vbo.unmap();
+
+			Service<ks::GLRenderer>::Get()->addRenderData(rg);
+		}
+
 		mJobStream->Add(
 			[this, &c, &p, &em, elapsed]() -> int
 			{
@@ -119,19 +135,10 @@ void ParticleSystem::step(float elapsed)
 				c.emit(em, p, elapsed);
 				c.step(p, elapsed);
 
-				if (p.live_count())
-				{
-					auto rg = mRenderGroups[&em];
-					rg->numIndices = p.live_count();
-
-					Service<ks::GLRenderer>::Get()->addRenderData(rg);
-				}
-
 				return 0;
 			},
 			"FX step"
 		);
-		++numJobs;
 #else
 		c.prune(p, elapsed);
 		c.emit(em, p, elapsed);
@@ -145,10 +152,6 @@ void ParticleSystem::step(float elapsed)
 		}
 #endif
 	}
-
-#if CONCURRENT_FX_UPDATE
-	mJobStream->Sync( numJobs * 3 );	// each job generates 3 others but only 2 local solvers, the global one can run till the next frame.
-#endif
 
 	ks::CollisionSolver::EndBatch();
 

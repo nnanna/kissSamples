@@ -7,6 +7,7 @@
 #include <RenderEngine\RenderData.h>
 #include <RenderEngine\GLRenderer.h>
 #include <RenderEngine\Material.h>
+#include <RenderEngine\GPUBuffer.h>
 
 #define CHECK_INIT_MODEL	if (!mModel) mModel = new ks::Model()
 
@@ -88,13 +89,14 @@ void SceneObject::fillRenderData()
 	mModel->computeNormals();
 	mModel->compileModel(ks::eTriangles);
 	auto verts				= mModel->getCompiledVertices();
-	auto indies				= mModel->getCompiledIndices(ks::eTriangles);
-	mRenderData				= new RenderData(verts, indies, mWorld);
+	auto indices			= mModel->getCompiledIndices(ks::eTriangles);
+	mRenderData				= new RenderData(indices, mWorld);
 	mRenderData->stride		= mModel->getCompiledVertexSize() * sizeof(float);
 	mRenderData->numIndices = mModel->getCompiledIndexCount(ks::eTriangles);
 	mRenderData->normOffset = mModel->getCompiledNormalOffset();
 	mRenderData->vertexSize = mModel->getPositionSize();
 	mRenderData->renderMode = mModel->getPrimType();
+	mRenderData->mGPUBuffer = ks::GPUBuffer::create<ks::vec3>(mRenderData->numIndices, GL_ARRAY_BUFFER, GL_STATIC_DRAW, (void*)verts);
 }
 
 

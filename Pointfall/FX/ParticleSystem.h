@@ -30,9 +30,9 @@ public:
 
 	FXID createController(ks::ParticleController& pDesc, const char* pName);
 
-	size_t spawn(ks::Emitter& pDesc);
+	uintptr_t spawn(ks::Emitter& pDesc);
 
-	void destroy(size_t pEmitterID);
+	void destroy(uintptr_t pEmitterID);
 
 	ksU32 getUID() const								{ return mUID; }
 	
