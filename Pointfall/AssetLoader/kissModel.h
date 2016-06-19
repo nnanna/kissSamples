@@ -27,7 +27,7 @@ namespace ks
 
 		const float* getCompiledVertices() const;
 
-		const ksU32* getCompiledIndices(PrimType prim = eTriangles) const;
+		const ksUShort* getCompiledIndices(PrimType prim = eTriangles) const;
 		
 		ks32 getCompiledVertexSize() const;
 

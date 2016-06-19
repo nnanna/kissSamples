@@ -7,7 +7,7 @@ using namespace ks;
 
 
 
-static ksU32 mCubeIndices[]		= {	0, 1, 2, 3,			// front
+static ksUShort mCubeIndices[]	= {	0, 1, 2, 3,			// front
 									4, 5, 1, 0,			// top
 									3, 2, 6, 7,			// bottom
 									5, 4, 7, 6,			// back
@@ -113,7 +113,7 @@ namespace ks
 		return mCustomVB ? mCustomVB : NULL;
 	}
 
-	const ksU32* Model::getCompiledIndices(PrimType prim) const
+	const ksUShort* Model::getCompiledIndices(PrimType prim) const
 	{
 		return mCustomVB ? mCubeIndices : NULL;
 	}
