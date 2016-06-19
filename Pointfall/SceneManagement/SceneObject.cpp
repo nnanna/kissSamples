@@ -88,15 +88,17 @@ void SceneObject::fillRenderData()
 
 	mModel->computeNormals();
 	mModel->compileModel(ks::eTriangles);
-	auto verts				= mModel->getCompiledVertices();
-	auto indices			= mModel->getCompiledIndices(ks::eTriangles);
-	mRenderData				= new RenderData(indices, mWorld);
+	const ksU32 numIndices	= mModel->getCompiledIndexCount(ks::eTriangles);
+	const float* verts		= mModel->getCompiledVertices();
+	ks::GPUBuffer* indices	= ks::GPUBuffer::create<ksU32>(numIndices, GL_ELEMENT_ARRAY_BUFFER, GL_STATIC_DRAW, (void*)mModel->getCompiledIndices(ks::eTriangles));
+	ks::GPUBuffer* vb		= ks::GPUBuffer::create<ks::vec3>(numIndices, GL_ARRAY_BUFFER, GL_STATIC_DRAW, (void*)verts);
+
+	mRenderData				= new RenderData(vb, indices, mWorld);
 	mRenderData->stride		= mModel->getCompiledVertexSize() * sizeof(float);
-	mRenderData->numIndices = mModel->getCompiledIndexCount(ks::eTriangles);
+	mRenderData->numIndices = numIndices;
 	mRenderData->normOffset = mModel->getCompiledNormalOffset();
 	mRenderData->vertexSize = mModel->getPositionSize();
 	mRenderData->renderMode = mModel->getPrimType();
-	mRenderData->mGPUBuffer = ks::GPUBuffer::create<ks::vec3>(mRenderData->numIndices, GL_ARRAY_BUFFER, GL_STATIC_DRAW, (void*)verts);
 }
 
 

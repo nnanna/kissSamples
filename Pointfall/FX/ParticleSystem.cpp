@@ -65,12 +65,12 @@ uintptr_t ParticleSystem::spawn(ks::Emitter& pDesc)
 	ks::Particles* p	= new ks::Particles(em->mMaxParticles);
 	mParticleGroups[em] = p;
 	
-	RenderData* rg		= new RenderData( nullptr, Matrix::IDENTITY );
+	ks::GPUBuffer* vb	= ks::GPUBuffer::create<vec3>( em->mMaxParticles, GL_ARRAY_BUFFER, GL_DYNAMIC_DRAW );
+	RenderData* rg		= new RenderData( vb, nullptr, Matrix::IDENTITY );
 	rg->vertexSize		= 3;
 	rg->renderMode		= ks::ePoints;
 	rg->stride			= sizeof(vec3);
 	rg->material		= mMaterial;
-	rg->mGPUBuffer		= ks::GPUBuffer::create<vec3>( em->mMaxParticles, GL_ARRAY_BUFFER, GL_DYNAMIC_DRAW );
 	
 	mRenderGroups[em]	= rg;
 
@@ -119,7 +119,7 @@ void ParticleSystem::step(float elapsed)
 			auto rg = mRenderGroups[&em];
 			rg->numIndices = p.live_count();
 
-			auto& vbo = *rg->mGPUBuffer;
+			auto& vbo = *rg->mVertexBuffer;
 
 			vec3* buffer = vbo.map<vec3>(rg->numIndices);
 			memcpy(buffer, p.positions.data(), rg->numIndices * sizeof(vec3));
