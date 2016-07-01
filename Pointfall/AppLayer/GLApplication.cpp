@@ -16,6 +16,8 @@
 #include <SceneManagement\Camera.h>
 #include <RenderEngine\Material.h>
 #include <RenderEngine\GLRenderer.h>
+#include <RenderEngine\GL\glew.h>
+#include <RenderEngine\GL\wglew.h>
 #include <RenderEngine\GL\glut.h>
 #include <FX\ParticleSystem.h>
 #include <FX\Particles.h>
@@ -42,6 +44,15 @@ struct RenderTextDesc
 //////////////////////////////////////////////////////////////////////////
 
 static volatile u32 num_frames = 0;
+static u32 INTERFRAME_UPDATE_INTERVAL = 0;
+
+void SetVSync(int sync)
+{
+	// ain't nobody got time to check WGL_EXT_swap_control
+	BOOL success = wglSwapIntervalEXT(sync);
+	if (success && sync == 0)
+		INTERFRAME_UPDATE_INTERVAL = 13;			// target 60fps clamp so the simulation isn't overly dampened
+}
 
 time_point<system_clock> gStartTime, gMRUTime;
 LARGE_INTEGER gFreq;
@@ -150,13 +161,7 @@ bool GLApplication::init(int argc, char** argv)
 	glutInit(&argc, argv);
 	glutInitWindowSize(600, 400);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
-
 	glutCreateWindow(mAppName);
-	glutDisplayFunc(GLApplication::render_callback);
-	glutReshapeFunc(GLApplication::reshape_callback);
-	glutKeyboardFunc(InputListener::KeyDownCallback);
-	glutKeyboardUpFunc(InputListener::KeyUpCallback);
-	glutTimerFunc( 1, GLApplication::update_callback, 1 );
 
 	glClearColor(0.5f, 0.5f, 0.5f, 0.f);  // Gray background.
 	glEnable(GL_DEPTH_TEST);
@@ -242,6 +247,13 @@ bool GLApplication::init(int argc, char** argv)
 
 	Material::gConstantsRegistry = gShaderConstants;
 
+	SetVSync(0);
+	glutDisplayFunc(GLApplication::render_callback);
+	glutReshapeFunc(GLApplication::reshape_callback);
+	glutKeyboardFunc(InputListener::KeyDownCallback);
+	glutKeyboardUpFunc(InputListener::KeyUpCallback);
+	glutTimerFunc(0, GLApplication::update_callback, 1);
+
 	return true;
 }
 
@@ -271,7 +283,7 @@ ks::Array<ParticleSystem*>& GLApplication::getObjectCollection()
 
 
 
-void GLApplication::update(ks32 pCallbackID)
+void GLApplication::update(ks32 pFrameID)
 {
 	mElapsedS = getElapsedTimeS();
 	if (mElapsedS > 0.05f)
@@ -358,10 +370,10 @@ void GLApplication::quit()
 
 //================================================================================================================
 
-void GLApplication::update_callback(ks32 pCallbackID)
+void GLApplication::update_callback(ks32 pFrameNumber)
 {
-	Service<GLApplication>::Get()->update(pCallbackID);
-	glutTimerFunc(1, GLApplication::update_callback, pCallbackID);
+	Service<GLApplication>::Get()->update(pFrameNumber);
+	glutTimerFunc(INTERFRAME_UPDATE_INTERVAL, GLApplication::update_callback, ++pFrameNumber);
 }
 
 //================================================================================================================
