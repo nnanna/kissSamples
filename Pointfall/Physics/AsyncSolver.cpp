@@ -30,6 +30,7 @@
 #include <Concurrency\ReadWriteLock.h>
 #include <Concurrency\BitLock.h>
 #include <Memory\ThreadStackAllocator.h>
+#include <Memory\FrameAllocator.h>
 #include <unordered_map>
 #if USE_STL_SORT
 #include <algorithm>
@@ -237,36 +238,14 @@ namespace ks {
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	struct GlobalSolver
 	{
-#define SOLVER_MEM_CAPACITY						15 * MEGABYTE
+#define SOLVER_MEM_CAPACITY						10 * MEGABYTE
 #define	SOLVER_QUERY_CAPACITY					16
 
 		StackBuffer FrameBuffer(ksU32 pCapacity)
 		{
-			int index(-1);
-			{
-				auto wGuard = mRWLock.Write();
-				if ((SOLVER_MEM_CAPACITY - mSize) > pCapacity)
-				{
-					index = mSize;
-					mSize += pCapacity;
-				}
-				else	// cycle round
-				{
-					index = 0;
-					mSize = pCapacity;
-				}
-			}
-
-			StackBuffer b(nullptr, 0);
-			if (index >= 0)
-			{
-				atomic_increment(&mNumQueries);
-				b = StackBuffer(mBuffer + index, pCapacity);
-			}
-			else
-			{
-				KS_ASSERT(!"Out of memory");
-			}
+			atomic_increment(&mNumQueries);
+			void* buffer = mFrameAllocator.allocate(pCapacity);
+			StackBuffer b(buffer, pCapacity);
 
 			return b;
 		}
@@ -341,17 +320,14 @@ namespace ks {
 		void EndBatch()
 		{}
 
-		GlobalSolver() : mSize(0), mNumQueries(0), mQueryIDs(0)
+		GlobalSolver() : mFrameAllocator(SOLVER_MEM_CAPACITY, true), mNumQueries(0), mQueryIDs(0)
 		{
-			mBuffer				= new char[ SOLVER_MEM_CAPACITY ];
 			local_query qempty	= {};
 			mQueries.resize(SOLVER_QUERY_CAPACITY, qempty);
 		}
 
 		~GlobalSolver()
-		{
-			delete[] mBuffer;
-		}
+		{}
 
 	private:
 		struct local_query
@@ -431,8 +407,7 @@ namespace ks {
 		}
 
 		ReadWriteLock		mRWLock;
-		char*				mBuffer;
-		ksU32				mSize;
+		FrameAllocator		mFrameAllocator;
 		ksU32				mQueryIDs;
 		ksU32				mNumQueries;
 		Array<local_query>	mQueries;
