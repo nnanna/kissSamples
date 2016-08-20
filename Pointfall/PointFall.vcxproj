@@ -75,7 +75,8 @@
       <UseLibraryDependencyInputs>false</UseLibraryDependencyInputs>
     </ProjectReference>
     <PreBuildEvent>
-      <Command>del $(SolutionDir)\modules\*.dll</Command>
+      <Command>if not exist $(SolutionDir)\modules\ md $(SolutionDir)\modules\
+del $(SolutionDir)\modules\*.dll</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -103,7 +104,8 @@
       <Command>copy .\dlls\*.dll $(SolutionDir)$(Configuration)\</Command>
     </PostBuildEvent>
     <PreBuildEvent>
-      <Command>del $(SolutionDir)\modules\*.dll</Command>
+      <Command>if not exist $(SolutionDir)\modules\ md $(SolutionDir)\modules\
+del $(SolutionDir)\modules\*.dll</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
