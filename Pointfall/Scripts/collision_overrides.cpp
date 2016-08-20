@@ -10,7 +10,7 @@ struct Script : public ScriptInterface
 		DEBUG_PRINT("***collision_overrides script loaded***\n");
 		
 		CollisionDefaults& cd			= *(CollisionDefaults*)mDataContext;
-		cd.COLLISION_RADIUS_SQ			= 1.7f;
+		cd.COLLISION_RADIUS_SQ			= 1.f;
 #ifndef DEBUG_VERSION
 		cd.IMPULSE_FACTOR				= 0.25f;
 		cd.MAX_TOTAL_COLLISIONS			= 16000;
