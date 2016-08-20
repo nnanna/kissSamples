@@ -21,6 +21,8 @@
 
 #include "AsyncSolver.h"
 #include "Constraint.h"
+#include "CollisionDefaults.h"
+#include <AppLayer\InputListener.h>
 #include <Maths\ks_Maths.inl>
 #include <insertion.h>
 #include <Service.h>
@@ -31,12 +33,17 @@
 #include <Concurrency\BitLock.h>
 #include <Memory\ThreadStackAllocator.h>
 #include <Memory\FrameAllocator.h>
+#include <Scripting\ScriptFactory.h>
 #include <unordered_map>
 #if USE_STL_SORT
 #include <algorithm>
 #endif
 
 static ksU32 gNumCollisions(0);
+CollisionDefaults gCD;
+CollisionDefaults gLocalDefaults(0.2f, 2);
+
+ks::ScriptFactory gScriptLoader(nullptr);
 
 namespace ks {
 
@@ -140,8 +147,6 @@ namespace ks {
 
 		ksU32 resolveCollisions(vec3* pResults, float elapsed)
 		{
-#define COLLISION_RADIUS_SQ				0.2f		// hardcode for now. @TODO
-#define MAX_PER_ENTITY_COLLISIONS		2
 			ksU32 num_collisions(0);
 			DistanceIndex di, dk;
 			vec3 impulse_v, norm;
@@ -150,24 +155,24 @@ namespace ks {
 				di = *(mSortedDistances + i);
 				dk = *(mSortedDistances + k);
 
-				while ( (di.distance - dk.distance) <= COLLISION_RADIUS_SQ )	// don't need no fabs(), descending order sorted
+				while ( (di.distance - dk.distance) <= gLocalDefaults.COLLISION_RADIUS_SQ )	// don't need no fabs(), descending order sorted
 				{
 					KS_ASSERT(di.index < mCapacity && dk.index < mCapacity);
 					norm = mPositions[di.index] - mPositions[dk.index];
-					if (norm.LengthSq() <= COLLISION_RADIUS_SQ)
+					if (norm.LengthSq() <= gLocalDefaults.COLLISION_RADIUS_SQ)
 					{
 						norm.FastNormalize();
 
 						impulse_v	= -norm;
 						impulse_v	*= norm.Dot( mVelocities[dk.index] - mVelocities[di.index] );
-						impulse_v	/= COLLISION_RADIUS_SQ;			// just because
+						impulse_v /= gLocalDefaults.COLLISION_RADIUS_SQ;			// just because
 
 						accumulate( pResults, di.index, -impulse_v );
 						accumulate( pResults, dk.index,  impulse_v );
 						++num_collisions;
 					}
 
-					if (++k >= mCapacity || k - i > MAX_PER_ENTITY_COLLISIONS)
+					if (++k >= mCapacity || k - i > gLocalDefaults.MAX_PER_ENTITY_COLLISIONS)
 						break;
 
 					dk = *(mSortedDistances + k);
@@ -214,11 +219,6 @@ namespace ks {
 
 	async_context::async_context(LocalSolver& pSolver) : mSolver(pSolver)
 	{}
-
-	void async_context::SyncConstraints()
-	{
-		mSolver.mConstraintRunning.Wait();
-	}
 
 	void async_context::SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel)
 	{
@@ -278,7 +278,7 @@ namespace ks {
 
 			if(queryIndex > 0 && queryIndex < SOLVER_QUERY_CAPACITY)
 			{
-#define BW_LOWPRIO_ID	3
+#define BW_LOWPRIO_ID	2
 				BatchWorker.QueueJob(
 					[this, elapsed, queryIndex]() -> ksU32
 					{
@@ -308,26 +308,34 @@ namespace ks {
 			KS_ASSERT(mNumQueries == mQueryIDs && mQueryIDs == completedQueries);
 			Reset();
 
-			DEBUG_PRINT("num collisions: %d\n", gNumCollisions);
+			printf("num collisions: %d     \r", gNumCollisions);
 			gNumCollisions = 0;
 		}
 
 		void BeginBatch()
 		{
+			const ksU32 upKey		= InputListener::getKeyUp();
+			const bool reloadScript	= (upKey == 'r');
+			if (mScript == nullptr || reloadScript)
+			{
+				mScript = gScriptLoader.Load("collision_overrides", &gCD, reloadScript);
+			}
 			AwaitCompletion();
 		}
 
 		void EndBatch()
 		{}
 
-		GlobalSolver() : mFrameAllocator(SOLVER_MEM_CAPACITY, true), mNumQueries(0), mQueryIDs(0)
+		GlobalSolver() : mFrameAllocator(SOLVER_MEM_CAPACITY, true), mNumQueries(0), mQueryIDs(0), mScript(nullptr)
 		{
 			local_query qempty	= {};
 			mQueries.resize(SOLVER_QUERY_CAPACITY, qempty);
 		}
 
 		~GlobalSolver()
-		{}
+		{
+			gScriptLoader.Unload(mScript);
+		}
 
 	private:
 		struct local_query
@@ -342,10 +350,6 @@ namespace ks {
 
 		ksU32 resolveInterQueryCollisions(float elapsed, const ksU32 pQueryIndex) const
 		{
-#define G_COLLISION_RADIUS_SQ		1.2f
-#define G_MAX_PER_ENTITY_COLLISIONS	2
-#define G_MAX_TOTAL_COLLISIONS		8000
-#define G_IMPULSE_FACTOR			0.4f
 			vec3 norm, impulse_v;
 			ksU32 total_collisions(0);
 
@@ -356,7 +360,7 @@ namespace ks {
 				const local_query& qi = mQueries[i];
 
 				int iindex = qi.capacity;
-				while (iindex-- > 0 && total_collisions < G_MAX_TOTAL_COLLISIONS)
+				while (iindex-- > 0 && total_collisions < gCD.MAX_TOTAL_COLLISIONS)
 				{
 					struct lbound_distance_pred
 					{
@@ -365,7 +369,7 @@ namespace ks {
 
 						inline bool operator()(const DistanceIndex& p) const
 						{
-							return p.distance > mCtx.distance - G_COLLISION_RADIUS_SQ;
+							return p.distance > mCtx.distance - gCD.COLLISION_RADIUS_SQ;
 						}
 						const DistanceIndex& mCtx;
 					};
@@ -373,22 +377,22 @@ namespace ks {
 					++jindex;	// so we can straight-up decrement it in the while loop.
 					ksU32 j_collisions(0);
 					float dist(0.f);
-					while (--jindex >= 0 && dist < G_COLLISION_RADIUS_SQ && j_collisions < G_MAX_PER_ENTITY_COLLISIONS)
+					while (--jindex >= 0 && dist < gCD.COLLISION_RADIUS_SQ && j_collisions < gCD.MAX_PER_ENTITY_COLLISIONS)
 					{
 						dist = qi.sortedDistance[iindex].distance - qj.sortedDistance[jindex].distance;
 						dist = dist < 0.f ? -dist : dist;
-						if (dist < G_COLLISION_RADIUS_SQ)
+						if (dist < gCD.COLLISION_RADIUS_SQ)
 						{
 							const ksU32 i = qi.sortedDistance[iindex].index;
 							const ksU32 j = qj.sortedDistance[jindex].index;
 							norm = qi.positions[i] - qj.positions[j];
-							if (norm.LengthSq() < G_COLLISION_RADIUS_SQ)
+							if (norm.LengthSq() < gCD.COLLISION_RADIUS_SQ)
 							{
 								norm.FastNormalize();
 
 								impulse_v = -norm;
 								impulse_v *= norm.Dot(qj.velocities[j] - qi.velocities[i]);
-								impulse_v /= G_IMPULSE_FACTOR;		// exaggerate
+								impulse_v /= gCD.IMPULSE_FACTOR;		// exaggerate
 
 								qi.local_solver->accumulate(qi.results, i, -impulse_v);
 								qj.local_solver->accumulate(qj.results, j, impulse_v);
@@ -412,6 +416,7 @@ namespace ks {
 		ksU32				mNumQueries;
 		Array<local_query>	mQueries;
 		mutable Semaphore	mQueryCompleted;
+		ScriptInterface*	mScript;
 	}GlobalSolver;
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

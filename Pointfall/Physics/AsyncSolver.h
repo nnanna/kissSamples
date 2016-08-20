@@ -46,7 +46,6 @@ namespace ks
 		async_context(LocalSolver& pSolver);
 		void SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel);
 		LocalSolver& Data();
-		void SyncConstraints();
 	
 	private:
 		LocalSolver&	mSolver;

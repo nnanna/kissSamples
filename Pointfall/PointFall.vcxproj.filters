@@ -27,6 +27,10 @@
     <Filter Include="Physics">
       <UniqueIdentifier>{6a69ca10-d95c-4487-ad16-a724ffd6ef5e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Scripts">
+      <UniqueIdentifier>{a993ac84-e4c9-43de-83a9-3283c870f310}</UniqueIdentifier>
+      <ParseFiles>false</ParseFiles>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -58,6 +62,12 @@
     </ClCompile>
     <ClCompile Include="Physics\Constraint.cpp">
       <Filter>Physics</Filter>
+    </ClCompile>
+    <ClCompile Include="Scripts\hero_emitter_overrides.cpp">
+      <Filter>Scripts</Filter>
+    </ClCompile>
+    <ClCompile Include="Scripts\collision_overrides.cpp">
+      <Filter>Scripts</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -92,6 +102,9 @@
       <Filter>Common</Filter>
     </ClInclude>
     <ClInclude Include="Physics\Constraint.h">
+      <Filter>Physics</Filter>
+    </ClInclude>
+    <ClInclude Include="Physics\CollisionDefaults.h">
       <Filter>Physics</Filter>
     </ClInclude>
   </ItemGroup>

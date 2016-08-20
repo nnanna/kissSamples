@@ -32,6 +32,7 @@ private:
 	~InputListener();
 
 	static	ksU32			mKeyDown;
+	static	ksU32			mKeyUp;
 
 public:
 
@@ -43,7 +44,9 @@ public:
 
 	static ksU32	getKeyDown()	{ return mKeyDown; }
 
-	static void		clearCachedInput()	{ mKeyDown = 0; }
+	static ksU32	getKeyUp()		{ return mKeyUp; }
+
+	static void		onFrameEnd()	{ mKeyUp = 0; }
 
 
 };

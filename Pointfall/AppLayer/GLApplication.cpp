@@ -23,12 +23,20 @@
 #include <FX\Particles.h>
 #include <Concurrency\JobScheduler.h>
 #include <chrono>
+#include <Scripting\ScriptFactory.h>
+#include <Scripting\ScriptInterface.h>
+
+
+#define HERO_EMIITER_SCRIPT		"hero_emitter_overrides"
 
 typedef ks::Matrix	Matrix;
 typedef ks::vec4	vec4;
 
 using namespace std::chrono;
 
+ks::ScriptFactory sf(nullptr);
+ks::ScriptInterface* sScript = nullptr;
+uintptr_t gHeroFXContext = 4.f;
 
 struct RenderTextDesc
 {
@@ -51,7 +59,7 @@ void SetVSync(int sync)
 	// ain't nobody got time to check WGL_EXT_swap_control
 	BOOL success = wglSwapIntervalEXT(sync);
 	if (success && sync == 0)
-		INTERFRAME_UPDATE_INTERVAL = 13;			// target 60fps clamp so the simulation isn't overly dampened
+		INTERFRAME_UPDATE_INTERVAL = 12;			// target 60-70fps clamp so the simulation isn't overly dampened
 }
 
 time_point<system_clock> gStartTime, gMRUTime;
@@ -219,24 +227,27 @@ bool GLApplication::init(int argc, char** argv)
 		emz.mMaxParticles		= 3069;									// lower max to stagger emission
 		emz.mEmissionRate		= 417;
 		emz.mFXID				= fxid;
-
-		pSys->spawn( emz );
+		gHeroFXContext = pSys->spawn( emz );
 
 
 		emz.mWorldPos			= vec3(3.f, 15.405f, 0.f);
 		emz.mEmissionVelocity	= vec3(-3.f, -0.6492f, 0.011203f);
 		emz.mMaxParticles		= 4173;
 		emz.mEmissionRate		= 300;
-
 		pSys->spawn( emz );
 
 
-		emz.mWorldPos = vec3(-3.f, 18.115f, 0.f);
-		emz.mEmissionVelocity = vec3(0.f, -0.2492f, 0.f);
-		emz.mMaxParticles = 3173;
-		emz.mEmissionRate = 200;
+		emz.mWorldPos			= vec3(-3.f, 18.115f, 0.f);
+		emz.mEmissionVelocity	= vec3(0.f, -0.2492f, 0.f);
+		emz.mMaxParticles		= 3173;
+		emz.mEmissionRate		= 200;
+		pSys->spawn( emz );
 
-		pSys->spawn(emz);
+		emz.mWorldPos			= vec3(7.f, 12.115f, 0.f);
+		emz.mEmissionVelocity	= vec3(-10.f, 2.1f, 0.f);
+		emz.mMaxParticles		= 1022;
+		emz.mEmissionRate		= 99;
+		pSys->spawn( emz );
 	}
 	glPointSize( PARTICLE_GL_POINT_SIZE );
 
@@ -253,6 +264,11 @@ bool GLApplication::init(int argc, char** argv)
 	glutKeyboardFunc(InputListener::KeyDownCallback);
 	glutKeyboardUpFunc(InputListener::KeyUpCallback);
 	glutTimerFunc(0, GLApplication::update_callback, 1);
+
+	if (sScript == nullptr)
+	{
+		sScript = sf.Load(HERO_EMIITER_SCRIPT, (void*)gHeroFXContext);
+	}
 
 	return true;
 }
@@ -289,7 +305,11 @@ void GLApplication::update(ks32 pFrameID)
 	if (mElapsedS > 0.05f)
 		mElapsedS = 0.05f;	// clamp for when glut suspends app update on window resize or drag. sigh.
 
-
+	const ksU32 upKey = InputListener::getKeyUp();
+	if (upKey == 'r')
+	{
+		sScript = sf.Load(HERO_EMIITER_SCRIPT, (void*)gHeroFXContext, true);
+	}
 
 #define FRAME_AGGREGATE_LIMIT	10
 	if (gFrameAggregateCounter++ == FRAME_AGGREGATE_LIMIT)
@@ -303,6 +323,8 @@ void GLApplication::update(ks32 pFrameID)
 	sprintf_s(gFPSData.text, "FPS : %.1f", gFPS);
 	addRenderTextData(gFPSData);
 	
+
+	if(sScript) sScript->Update(mElapsedS);
 	
 	for (size_t i = 0; i < mParticleSubsytems.size(); ++i)
 	{
@@ -317,6 +339,8 @@ void GLApplication::update(ks32 pFrameID)
 	CameraManager::update(mElapsedS, false);
 
 	mRenderer->update(mElapsedS);
+
+	InputListener::onFrameEnd();
 
 	glutPostRedisplay();
 }
@@ -348,6 +372,7 @@ void GLApplication::go()
 
 void GLApplication::quit()
 {
+	sf.Unload(sScript);
 	for(size_t i = 0; i < mParticleSubsytems.size(); i++)
 	{
 		delete mParticleSubsytems[i];

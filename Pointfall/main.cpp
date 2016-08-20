@@ -4,6 +4,8 @@
 
 #define kissEnum(name, ...) enum name { __VA_ARGS__, __COUNT};
 
+// TODO: GPU buffers/allocators, texturing, stateless rendering, scripting, replace GLUT
+
 using namespace ks;
 
 enum FStates
@@ -31,6 +33,7 @@ int main( int argc, char *argv[] )
 	printf("W	- zoom in	S	- zoom out\n");
 	printf("A	- pivot left	D	- pivot right\n");
 	printf("Shift+W - lift		Shift+S - drop\n");
+
 
 	GLApplication app;
 	if( app.init(argc, argv) )

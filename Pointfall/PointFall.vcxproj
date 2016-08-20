@@ -65,6 +65,8 @@
       <AdditionalLibraryDirectories>.\Lib;$(SolutionDir)$(Configuration)\</AdditionalLibraryDirectories>
       <AdditionalDependencies>glut32.lib;kissFramework.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <Profile>true</Profile>
+      <EntryPointSymbol>
+      </EntryPointSymbol>
     </Link>
     <PostBuildEvent>
       <Command>copy .\dlls\*.dll $(SolutionDir)$(Configuration)\</Command>
@@ -72,6 +74,9 @@
     <ProjectReference>
       <UseLibraryDependencyInputs>false</UseLibraryDependencyInputs>
     </ProjectReference>
+    <PreBuildEvent>
+      <Command>del $(SolutionDir)\modules\*.dll</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -97,6 +102,9 @@
     <PostBuildEvent>
       <Command>copy .\dlls\*.dll $(SolutionDir)$(Configuration)\</Command>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>del $(SolutionDir)\modules\*.dll</Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AppLayer\GLApplication.cpp" />
@@ -109,6 +117,15 @@
     <ClCompile Include="Physics\Constraint.cpp" />
     <ClCompile Include="SceneManagement\Camera.cpp" />
     <ClCompile Include="SceneManagement\SceneObject.cpp" />
+    <ClCompile Include="Scripts\collision_overrides.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="Scripts\hero_emitter_overrides.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <DeploymentContent>true</DeploymentContent>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AppLayer\GLApplication.h" />
@@ -119,6 +136,7 @@
     <ClInclude Include="FX\Particles.h" />
     <ClInclude Include="FX\ParticleSystem.h" />
     <ClInclude Include="Physics\AsyncSolver.h" />
+    <ClInclude Include="Physics\CollisionDefaults.h" />
     <ClInclude Include="Physics\Constraint.h" />
     <ClInclude Include="SceneManagement\Camera.h" />
     <ClInclude Include="SceneManagement\SceneObject.h" />

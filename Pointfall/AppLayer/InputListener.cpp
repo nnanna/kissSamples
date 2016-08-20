@@ -5,6 +5,7 @@
 
 
 ksU32	InputListener::mKeyDown = 0;
+ksU32	InputListener::mKeyUp = 0;
 
 InputListener::InputListener()
 {}
@@ -63,6 +64,8 @@ void InputListener::KeyDownCallback(unsigned char c, int x, int y)
 	default:
 		mKeyDown = KEYPRESS_NONE;
 	}
+
+	mKeyUp = 0;
 }
 
 
@@ -102,6 +105,7 @@ void InputListener::KeyUpCallback(unsigned char c, int x, int y)
 		GLApplication::destroy(0);
 		break;
 	}
+	mKeyUp	= c;
 	DEBUG_PRINT("keyup %c\n", c);
 }
 

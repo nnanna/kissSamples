@@ -160,7 +160,7 @@ namespace ks
 		}
 		async_context ctx		= CollisionSolver::BeginAsync(pParticles.forces, numParticles, elapsed, &ccfg);
 
-		float halfstep			= elapsed * 0.5f;
+		const float halfstep	= elapsed * 0.5f;
 		const vec3 half_a_t		= BaseAcceleration * halfstep;
 		vec3 vel, half_accel, pos;
 
@@ -179,8 +179,6 @@ namespace ks
 			
 			ctx.SubmitQuery( i, pos, vel );
 		}
-
-		//ctx.SyncConstraints();
 	}
 
 }	// namespace ks
