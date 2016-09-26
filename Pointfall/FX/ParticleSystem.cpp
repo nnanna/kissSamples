@@ -28,7 +28,7 @@ ParticleSystem::ParticleSystem() : mMaterial(nullptr), mJobStream(nullptr)
 {
 	VRegister();
 #if CONCURRENT_FX_UPDATE
-	mJobStream = ks::JobGroup::create<16>( ks::JobGroup::JG_NEEDS_DEFERRED_QUEUE );
+	mJobStream = ks::JobGroup::create<32>( ks::JobGroup::JG_NEEDS_DEFERRED_QUEUE );
 #endif
 }
 
@@ -114,6 +114,18 @@ void ParticleSystem::step(float elapsed)
 		auto& c = em.mFXID < mControllers.size() ? mControllers[ em.mFXID ] : sDefaultController;
 
 #if CONCURRENT_FX_UPDATE
+		mJobStream->Add(
+			[this, &c, &p, &em, elapsed]() -> int
+			{
+				c.prune(p, elapsed);
+				c.emit(em, p, elapsed);
+				c.step(p, elapsed);
+
+				return 0;
+			},
+			"FX step"
+		);
+
 		if (p.live_count())							// upload previous frame's positions to GPU - a frame's latency is very acceptable
 		{
 			auto rg = mRenderGroups[&em];
@@ -127,18 +139,6 @@ void ParticleSystem::step(float elapsed)
 
 			Service<ks::GLRenderer>::Get()->addRenderData(rg);
 		}
-
-		mJobStream->Add(
-			[this, &c, &p, &em, elapsed]() -> int
-			{
-				c.prune(p, elapsed);
-				c.emit(em, p, elapsed);
-				c.step(p, elapsed);
-
-				return 0;
-			},
-			"FX step"
-		);
 #else
 		c.prune(p, elapsed);
 		c.emit(em, p, elapsed);

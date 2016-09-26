@@ -25,6 +25,7 @@
 #include <chrono>
 #include <Scripting\ScriptFactory.h>
 #include <Scripting\ScriptInterface.h>
+#include <Profiling\Trace.h>
 
 
 #define HERO_EMIITER_SCRIPT		"hero_emitter_overrides"
@@ -56,10 +57,15 @@ static u32 INTERFRAME_UPDATE_INTERVAL = 0;
 
 void SetVSync(int sync)
 {
-	// ain't nobody got time to check WGL_EXT_swap_control
-	BOOL success = wglSwapIntervalEXT(sync);
-	if (success && sync == 0)
-		INTERFRAME_UPDATE_INTERVAL = 12;			// target 60-70fps clamp so the simulation isn't overly dampened
+	if (sync)
+		INTERFRAME_UPDATE_INTERVAL = sync;
+	else
+	{
+		// ain't nobody got time to check WGL_EXT_swap_control
+		BOOL success = wglSwapIntervalEXT(sync);
+		if (success && sync == 0)
+			INTERFRAME_UPDATE_INTERVAL = 12;			// target 60-70fps clamp so the simulation isn't overly dampened
+	}
 }
 
 time_point<system_clock> gStartTime, gMRUTime;
@@ -166,6 +172,8 @@ bool GLApplication::init(int argc, char** argv)
 	if( mRenderer )
 		return true;
 
+	ks::TraceAPI::Init(40);
+
 	glutInit(&argc, argv);
 	glutInitWindowSize(600, 400);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH | GLUT_MULTISAMPLE);
@@ -181,7 +189,7 @@ bool GLApplication::init(int argc, char** argv)
 
 	CameraManager::createCamera();
 
-	mJobScheduler = new ks::JobScheduler(4, 63);		// 4 workers, 63 jobs max, multi-producer
+	mJobScheduler = new ks::JobScheduler(3, 63);		// 4 workers, 63 jobs max, multi-producer
 	Service<ks::JobScheduler>::Register( mJobScheduler );
 
 	gFontMaterial.SetDiffuse(0, 0, 0);
@@ -270,6 +278,7 @@ bool GLApplication::init(int argc, char** argv)
 		sScript = sf.Load(HERO_EMIITER_SCRIPT, (void*)gHeroFXContext);
 	}
 
+	ks::TraceAPI::Start();
 	return true;
 }
 
@@ -301,6 +310,8 @@ ks::Array<ParticleSystem*>& GLApplication::getObjectCollection()
 
 void GLApplication::update(ks32 pFrameID)
 {
+	TRACE_FUNC();
+
 	mElapsedS = getElapsedTimeS();
 	if (mElapsedS > 0.05f)
 		mElapsedS = 0.05f;	// clamp for when glut suspends app update on window resize or drag. sigh.
@@ -309,6 +320,12 @@ void GLApplication::update(ks32 pFrameID)
 	if (upKey == 'r')
 	{
 		sScript = sf.Load(HERO_EMIITER_SCRIPT, (void*)gHeroFXContext, true);
+	}
+	if (sScript) sScript->Update(mElapsedS);
+
+	for (size_t i = 0; i < mParticleSubsytems.size(); ++i)
+	{
+		mParticleSubsytems[i]->step(mElapsedS);
 	}
 
 #define FRAME_AGGREGATE_LIMIT	10
@@ -323,13 +340,6 @@ void GLApplication::update(ks32 pFrameID)
 	sprintf_s(gFPSData.text, "FPS : %.1f", gFPS);
 	addRenderTextData(gFPSData);
 	
-
-	if(sScript) sScript->Update(mElapsedS);
-	
-	for (size_t i = 0; i < mParticleSubsytems.size(); ++i)
-	{
-		mParticleSubsytems[i]->step(mElapsedS);
-	}
 
 	for (size_t i = 0; i < mSceneObjects.size(); ++i)
 	{
@@ -390,6 +400,8 @@ void GLApplication::quit()
 	delete mJobScheduler;
 
 	delete mRenderer;
+
+	ks::TraceAPI::Destroy();
 }
 
 
@@ -419,6 +431,7 @@ void GLApplication::reshape_callback(int width, int height)
 
 void GLApplication::render_callback()
 {
+	TRACE_FUNC();
 	Camera* cam = CameraManager::getMainCamera();
 
 	Service<ks::GLRenderer>::Get()->render(cam->getPosition(), cam->getView(), cam->getProjection());

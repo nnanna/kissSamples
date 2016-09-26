@@ -34,6 +34,7 @@
 #include <Memory\ThreadStackAllocator.h>
 #include <Memory\FrameAllocator.h>
 #include <Scripting\ScriptFactory.h>
+#include <Profiling\Trace.h>
 #include <unordered_map>
 #if USE_STL_SORT
 #include <algorithm>
@@ -222,11 +223,6 @@ namespace ks {
 
 	void async_context::SubmitQuery(ksU32 pResultIndex, const vec3& pPos, const vec3& pVel)
 	{
-		while (mSolver.capacity() == 0)
-		{
-			ksYieldThread;			// wait for solver workspace to be allocated
-		}
-
 		mSolver.mPositions[pResultIndex]	= pPos;
 		mSolver.mVelocities[pResultIndex]	= pVel;
 		++mSolver.mRevision;
@@ -278,14 +274,13 @@ namespace ks {
 
 			if(queryIndex > 0 && queryIndex < SOLVER_QUERY_CAPACITY)
 			{
-#define BW_LOWPRIO_ID	2
+#define BW_PRIO_LOW	3
 				BatchWorker.QueueJob(
 					[this, elapsed, queryIndex]() -> ksU32
 					{
 						return resolveInterQueryCollisions( elapsed, queryIndex );
 					},
-					"GlobalSolver",
-					BW_LOWPRIO_ID);
+					"GlobalSolver", BW_PRIO_LOW);
 			}
 			else if(queryIndex == 0)
 			{
@@ -298,6 +293,7 @@ namespace ks {
 			int completedQueries(0);
 			int numQueries = mNumQueries;
 
+			TRACE_SCOPE("AwaitCompletion");
 			while (numQueries - completedQueries > 0)
 			{
 				mQueryCompleted.wait();
@@ -308,7 +304,7 @@ namespace ks {
 			KS_ASSERT(mNumQueries == mQueryIDs && mQueryIDs == completedQueries);
 			Reset();
 
-			printf("num collisions: %d     \r", gNumCollisions);
+			DEBUG_PRINT("num collisions: %d     \r", gNumCollisions);
 			gNumCollisions = 0;
 		}
 
@@ -425,15 +421,14 @@ namespace ks {
 
 	async_context CollisionSolver::BeginAsync(Array<vec3>& pForceResults, ksU32 pNumElements, float elapsed, const ConstraintConfig* pConstraint )
 	{
-		LocalSolver& ls			= *LocalSolver::Acquire( &pForceResults );
+		LocalSolver& ls		= *LocalSolver::Acquire( &pForceResults );
+		StackBuffer stack	= GlobalSolver.FrameBuffer( LocalSolver::AllocSize(pNumElements) );
+		ls.init(stack, pNumElements);
 
 		KS_ASSERT(pNumElements <= pForceResults.size());
 
 		auto solver = [&pForceResults, &ls, pNumElements, elapsed]() -> ksU32
 		{
-			StackBuffer stack	= GlobalSolver.FrameBuffer( LocalSolver::AllocSize(pNumElements) );
-			ls.init(stack, pNumElements);
-
 			ls.asyncQuerySort();
 
 			GlobalSolver.Submit(ls, pForceResults.data(), elapsed);
