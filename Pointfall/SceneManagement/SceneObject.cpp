@@ -3,7 +3,7 @@
 #include <defines.h>
 #include <Service.h>
 #include <AppLayer\GLApplication.h>
-#include <AssetLoader\kissModel.h>
+#include <Scene\Model.h>
 #include <RenderEngine\RenderData.h>
 #include <RenderEngine\GLRenderer.h>
 #include <RenderEngine\Material.h>
@@ -68,7 +68,7 @@ void SceneObject::loadModel(const char* filepath)
 {
 	CHECK_INIT_MODEL;
 
-	if ( mModel->loadModelFromFile(filepath) )
+	if ( mModel->Load(filepath) )
 	{
 		fillRenderData();
 	}
@@ -91,12 +91,12 @@ void SceneObject::fillRenderData()
 	const ksU32 numIndices	= mModel->getCompiledIndexCount(ks::eTriangles);
 	const ks::vec3* verts	= (const ks::vec3*)mModel->getCompiledVertices();
 	ks::GPUBuffer* indices	= ks::GPUBuffer::create(numIndices, GL_ELEMENT_ARRAY_BUFFER, GL_STATIC_DRAW, mModel->getCompiledIndices(ks::eTriangles));
-	ks::GPUBuffer* vb		= ks::GPUBuffer::create(numIndices, GL_ARRAY_BUFFER, GL_STATIC_DRAW, verts);
+	ks::GPUBuffer* vb		= ks::GPUBuffer::create(mModel->getCompiledVertexCount(), GL_ARRAY_BUFFER, GL_STATIC_DRAW, verts);
 
 	mRenderData				= new RenderData(vb, indices, mWorld);
 	mRenderData->stride		= mModel->getCompiledVertexSize() * sizeof(float);
 	mRenderData->numIndices = numIndices;
-	mRenderData->normOffset = mModel->getCompiledNormalOffset();
+	mRenderData->normOffset = mModel->getCompiledNormalOffset() * sizeof(float);
 	mRenderData->vertexSize = mModel->getPositionSize();
 	mRenderData->renderMode = mModel->getPrimType();
 }
