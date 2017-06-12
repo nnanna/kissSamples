@@ -73,7 +73,7 @@ private:
 
 	float		mFar;
 
-	float		mAngle;
+	float		mRadians;
 
 	float		mRadius;
 };

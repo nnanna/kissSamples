@@ -3,7 +3,7 @@
 #include <AppLayer/InputListener.h>
 
 
-Camera::Camera() : mNear(1), mFar(90000), mAspectRatio(0.75f), mFOV(60.0f), mAngle(0.f), mRadius(30.f)
+Camera::Camera() : mNear(1), mFar(90000), mAspectRatio(0.75f), mFOV(60.0f), mRadians(0.f), mRadius(30.f)
 {
 	mLookAt		= vec3(0,0,0);
 	mPosition	= vec3(0, 5, 30);
@@ -21,6 +21,7 @@ Camera::~Camera()
 
 void Camera::update(float elapsed)
 {
+#define ROTATION_DAMPING	0.05f
 	const ksU32 downKey	= InputListener::getKeyDown();
 	const float speed	= elapsed * 10.f;
 
@@ -55,13 +56,13 @@ void Camera::update(float elapsed)
 			mRadius += speed;
 
 		if (downKey & KEYPRESS_LEFT)
-			mAngle -= speed * 0.05f;
+			mRadians -= speed * ROTATION_DAMPING;
 
 		if (downKey & KEYPRESS_RIGHT)
-			mAngle += speed * 0.05f;
+			mRadians += speed * ROTATION_DAMPING;
 	}
 
-	mPosition = vec3(mRadius*sin(mAngle), mPosition.y, mRadius*cos(mAngle));
+	mPosition = vec3(mRadius*sinf(mRadians), mPosition.y, mRadius*cosf(mRadians));
 
 
 	ks::buildViewMatrix(mPosition.x, mPosition.y, mPosition.z,
@@ -104,7 +105,7 @@ void CameraManager::update(float elapsed, bool update_all_cams)
 {
 	if (update_all_cams)
 	{
-		for ( ksU32 i = 0; i < mCameras.size(); i++  )
+		for (ksU32 i = 0; i < mCameras.size(); ++i)
 		{
 			mCameras[i]->update(elapsed);
 		}
