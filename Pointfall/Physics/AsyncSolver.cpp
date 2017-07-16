@@ -142,12 +142,15 @@ namespace ks {
 				}
 			}
 #if USE_STL_SORT
+			TRACE_BEGIN("sort query", sorttrace);
 			std::sort(mSortedDistances, mSortedDistances + mIndex, ascending_sort_predicate<DistanceIndex>());
+			TRACE_END(sorttrace);
 #endif
 		}
 
 		ksU32 resolveCollisions(vec3* pResults, float elapsed)
 		{
+			TRACE_FUNC();
 			ksU32 num_collisions(0);
 			DistanceIndex di, dk;
 			vec3 impulse_v, norm;
@@ -186,9 +189,9 @@ namespace ks {
 
 		void accumulate(vec3* pResults, ksU32 index, const vec3& val)
 		{
-			mResultsGuard.Lock128(index);
+			//mResultsGuard.Lock128(index);
 			pResults[ index ] += val;
-			mResultsGuard.Unlock128(index);
+			//mResultsGuard.Unlock128(index);
 		}
 
 		static ksU32 AllocSize( ksU32 pNumElements )
@@ -239,7 +242,6 @@ namespace ks {
 
 		StackBuffer FrameBuffer(ksU32 pCapacity)
 		{
-			atomic_increment(&mNumQueries);
 			void* buffer = mFrameAllocator.allocate(pCapacity);
 			StackBuffer b(buffer, pCapacity);
 
@@ -272,19 +274,19 @@ namespace ks {
 					mQueries[queryIndex] = lq;
 			}
 
-			if(queryIndex > 0 && queryIndex < SOLVER_QUERY_CAPACITY)
+			if(queryIndex > 0 && queryIndex < SOLVER_QUERY_CAPACITY)	// the first query doesn't need a global solver
 			{
 #define BW_PRIO_LOW	3
-				BatchWorker.QueueJob(
-					[this, elapsed, queryIndex]() -> ksU32
+				for (ksU32 i = 0; i < queryIndex; ++i)
+				{
+					atomic_increment(&mNumQueries);
+
+					BatchWorker.QueueJob( [this, elapsed, i, queryIndex]() -> ksU32
 					{
-						return resolveInterQueryCollisions( elapsed, queryIndex );
+						return resolveInterQueryCollisions(elapsed, i, queryIndex);
 					},
 					"GlobalSolver", BW_PRIO_LOW);
-			}
-			else if(queryIndex == 0)
-			{
-				mQueryCompleted.signal();		// the first query doesn't need a global solver
+				}
 			}
 		}
 
@@ -301,7 +303,7 @@ namespace ks {
 				numQueries = mNumQueries;
 			}
 
-			KS_ASSERT(mNumQueries == mQueryIDs && mQueryIDs == completedQueries);
+			KS_ASSERT(mNumQueries == completedQueries);
 			Reset();
 
 			DEBUG_PRINT("num collisions: %d     \r", gNumCollisions);
@@ -344,58 +346,52 @@ namespace ks {
 			LocalSolver*	local_solver;
 		};
 
-		ksU32 resolveInterQueryCollisions(float elapsed, const ksU32 pQueryIndex) const
+		ksU32 resolveInterQueryCollisions(float elapsed, ksU32 query_i, const ksU32 query_j) const
 		{
 			vec3 norm, impulse_v;
 			ksU32 total_collisions(0);
 
-			const local_query& qj = mQueries[pQueryIndex];
+			const local_query& qi = mQueries[query_i];
+			const local_query& qj = mQueries[query_j];
 
-			for (ksU32 i = 0; i < pQueryIndex; ++i)
+			int iindex = qi.capacity;
+			while (iindex-- > 0 && total_collisions < gCD.MAX_TOTAL_COLLISIONS)
 			{
-				const local_query& qi = mQueries[i];
+				float dist(0.f);
+				ksU32 j_collisions(0);
 
-				int iindex = qi.capacity;
-				while (iindex-- > 0 && total_collisions < gCD.MAX_TOTAL_COLLISIONS)
+				struct lbound_distance_pred
 				{
-					struct lbound_distance_pred
+					lbound_distance_pred(const DistanceIndex& pCtx) : mDistance(pCtx.distance)	{}
+					inline bool operator()(const DistanceIndex& p) const						{ return p.distance > mDistance - gCD.COLLISION_RADIUS_SQ; }
+
+					const float mDistance;
+				};
+
+				int jindex = ks::binary_find(qj.sortedDistance, qj.capacity, lbound_distance_pred(qi.sortedDistance[iindex])) + 1;	// +1 so we can straight-up decrement it below.
+
+				while (--jindex >= 0 && dist < gCD.COLLISION_RADIUS_SQ && j_collisions < gCD.MAX_PER_ENTITY_COLLISIONS)
+				{
+					dist = qi.sortedDistance[iindex].distance - qj.sortedDistance[jindex].distance;
+					dist = dist < 0.f ? -dist : dist;
+					if (dist < gCD.COLLISION_RADIUS_SQ)						// 1D distance test
 					{
-						lbound_distance_pred(const DistanceIndex& pCtx) : mCtx(pCtx)
-						{}
-
-						inline bool operator()(const DistanceIndex& p) const
+						const ksU32 i = qi.sortedDistance[iindex].index;
+						const ksU32 j = qj.sortedDistance[jindex].index;
+						norm = qi.positions[i] - qj.positions[j];
+						if (norm.LengthSq() < gCD.COLLISION_RADIUS_SQ)		// 3D distance test
 						{
-							return p.distance > mCtx.distance - gCD.COLLISION_RADIUS_SQ;
-						}
-						const DistanceIndex& mCtx;
-					};
-					int jindex = ks::binary_find(qj.sortedDistance, qj.capacity, lbound_distance_pred(qi.sortedDistance[iindex]));
-					++jindex;	// so we can straight-up decrement it in the while loop.
-					ksU32 j_collisions(0);
-					float dist(0.f);
-					while (--jindex >= 0 && dist < gCD.COLLISION_RADIUS_SQ && j_collisions < gCD.MAX_PER_ENTITY_COLLISIONS)
-					{
-						dist = qi.sortedDistance[iindex].distance - qj.sortedDistance[jindex].distance;
-						dist = dist < 0.f ? -dist : dist;
-						if (dist < gCD.COLLISION_RADIUS_SQ)
-						{
-							const ksU32 i = qi.sortedDistance[iindex].index;
-							const ksU32 j = qj.sortedDistance[jindex].index;
-							norm = qi.positions[i] - qj.positions[j];
-							if (norm.LengthSq() < gCD.COLLISION_RADIUS_SQ)
-							{
-								norm.FastNormalize();
+							norm.FastNormalize();
 
-								impulse_v = -norm;
-								impulse_v *= norm.Dot(qj.velocities[j] - qi.velocities[i]);
-								impulse_v /= gCD.IMPULSE_FACTOR;		// exaggerate
+							impulse_v = -norm;
+							impulse_v *= norm.Dot(qj.velocities[j] - qi.velocities[i]);
+							impulse_v /= gCD.IMPULSE_FACTOR;		// exaggerate
 
-								qi.local_solver->accumulate(qi.results, i, -impulse_v);
-								qj.local_solver->accumulate(qj.results, j, impulse_v);
+							qi.local_solver->accumulate(qi.results, i, -impulse_v);
+							qj.local_solver->accumulate(qj.results, j, impulse_v);
 
-								++j_collisions;
-								++total_collisions;
-							}
+							++j_collisions;
+							++total_collisions;
 						}
 					}
 				}
@@ -422,6 +418,9 @@ namespace ks {
 	async_context CollisionSolver::BeginAsync(Array<vec3>& pForceResults, ksU32 pNumElements, float elapsed, const ConstraintConfig* pConstraint )
 	{
 		LocalSolver& ls		= *LocalSolver::Acquire( &pForceResults );
+
+		AwaitQueryCompletion(ls);
+
 		StackBuffer stack	= GlobalSolver.FrameBuffer( LocalSolver::AllocSize(pNumElements) );
 		ls.init(stack, pNumElements);
 
@@ -435,17 +434,13 @@ namespace ks {
 
 			ksU32 numCollisions = ls.resolveCollisions(pForceResults.data(), elapsed);
 
-			ls.mConstraintRunning.Wait();	// don't release StackBuffer while constraint's still running
+			atomic_add(&gNumCollisions, numCollisions);
 
 			// on_complete
-			atomic_add(&gNumCollisions, numCollisions);
-			ls.reset();
 			ls.IdleWatch.signal();
 
 			return numCollisions;
 		};
-
-		AwaitQueryCompletion(ls);
 
 		BatchWorker.QueueJob(solver, "CollisionSolver");
 
@@ -496,6 +491,8 @@ namespace ks {
 	void CollisionSolver::AwaitQueryCompletion(LocalSolver& pSolver)
 	{
 		pSolver.IdleWatch.wait();
+		pSolver.mConstraintRunning.Wait();	// don't release StackBuffer or reset localsolver while constraint's still running
+		pSolver.reset();
 	}
 
 	void CollisionSolver::BeginBatch(JobGroup* pJobStream /*= nullptr*/)

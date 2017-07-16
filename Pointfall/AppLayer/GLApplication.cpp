@@ -172,7 +172,7 @@ bool GLApplication::init(int argc, char** argv)
 	if( mRenderer )
 		return true;
 
-	ks::TraceAPI::Init(40);
+	ks::TraceAPI::Init(512);
 
 	glutInit(&argc, argv);
 	glutInitWindowSize(600, 400);
@@ -189,7 +189,7 @@ bool GLApplication::init(int argc, char** argv)
 
 	CameraManager::createCamera();
 
-	mJobScheduler = new ks::JobScheduler(3, 63);		// 4 workers, 63 jobs max, multi-producer
+	mJobScheduler = new ks::JobScheduler(3, 32);		// 3 workers, 32 jobs max, multi-producer
 	Service<ks::JobScheduler>::Register( mJobScheduler );
 
 	gFontMaterial.SetDiffuse(0, 0, 0);
