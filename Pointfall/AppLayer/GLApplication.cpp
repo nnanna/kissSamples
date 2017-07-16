@@ -213,6 +213,18 @@ bool GLApplication::init(int argc, char** argv)
 		floor->setMatrix(trans);
 	}
 
+	SceneObject* venus = new SceneObject();
+	{
+		venus->initMaterial(gLitShaderFilename, gBasicLitVertProgram, gBasicLitFragProgram);
+		venus->loadModel("media//models//venusm.obj");
+		Matrix trans(Matrix::IDENTITY);
+		float scaling = 0.001f;
+		trans.SetScaling(scaling);
+		trans.m24 = scaling + 0.7f;		// offset the y-axis slightly above 0
+
+		venus->setMatrix(trans);
+	}
+
 	/*SceneObject* cube = new SceneObject();
 	{
 		cube->initMaterial(gLitShaderFilename, gBasicLitVertProgram, gBasicLitFragProgram);
@@ -222,7 +234,7 @@ bool GLApplication::init(int argc, char** argv)
 
 	ParticleSystem* pSys = new ParticleSystem();
 	{
-		pSys->initMaterial(gLitShaderFilename, gBasicLitVertProgram, gBasicLitFragProgram);
+		pSys->initMaterial(gUnlitShaderFilename, gUnlitVertProgram, gUnlitFragProgram);
 
 		ks::ParticleController c;
 		c.SizeDurationRange		= vec4( 0.2f, 0.2f, 10.4f, 11.8f );
@@ -451,7 +463,7 @@ ks::SimpleShaderContainer* GLApplication::loadShader(const char* name, const cha
 	if (shader == nullptr)
 	{
 		shader = ks::RenderResourceFactory::findOrCreateShader(name);
-		shader->loadProgram(gUnlitShaderFilename, gUnlitVertProgram, gUnlitFragProgram);
+		shader->loadProgram(name, vp_filename, fp_filename);
 
 		for (int i = 0; i < TOTAL_SHADER_CONSTANTS; ++i)
 		{
