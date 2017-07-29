@@ -170,11 +170,11 @@ void ParticleSystem::VRegister()
 
 //=================================================================================================================
 
-void ParticleSystem::initMaterial(const char *name, const char* vp_entry, const char* fp_entry)
+void ParticleSystem::initMaterial(const char *shader_filename)
 {
 	if (mMaterial == nullptr)
 	{
-		mMaterial = new Material( GLApplication::loadShader(name, vp_entry, fp_entry) );
+		mMaterial = new Material(GLApplication::loadShader(shader_filename));
 		Material::setRedPlasticMaterial(mMaterial);
 	}
 }

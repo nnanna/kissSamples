@@ -32,7 +32,7 @@ public:
 	void loadCube( float pSize );
 	void loadQuad(float pSize);
 
-	void initMaterial( const char* filename, const char* vp_entry, const char* fp_entry );
+	void initMaterial( const char* shader_filename);
 
 
 	ks::Model*		getModel()				{return mModel;}

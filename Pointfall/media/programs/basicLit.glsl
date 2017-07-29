@@ -1,8 +1,7 @@
-#version 120
-//#extension GL_ARB_draw_buffers : require
+#version 330
 //#extension GL_EXT_gpu_shader4 : require
 
-
+//all these are in eye-space
 varying vec3 l_pos;
 varying vec3 l_nor;
 
@@ -21,9 +20,20 @@ uniform vec3 Kd = vec3( 1.0, 1.0, 1.0);
 uniform vec3 Ks = vec3( 1.0, 1.0, 1.0);
 uniform float shininess = 0.0f;
 
+#if VERT_SHADER_ENABLED
 void main()
 {
+	gl_Position = vec4(in_pos.xyz, 1) * modelViewProj;
 
+	l_pos = in_pos.xyz;
+	l_nor = in_nor;
+}
+#endif
+
+
+#if FRAG_SHADER_ENABLED
+void main()
+{
 	vec3 P = l_pos;
 	vec3 N = l_nor;
 
@@ -48,7 +58,8 @@ void main()
 	}
 	vec3 specular = Ks * lightColor * specularLight;
 
-
 	gl_FragColor = vec4(emissive + ambient + diffuse + specular, 1);
+	//gl_FragColor = vec4(N.xyz, 1);
 	//gl_FragData[0] = vec4( position.xyz, 0.0);
 }
+#endif

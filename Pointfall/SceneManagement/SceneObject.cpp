@@ -105,11 +105,11 @@ void SceneObject::fillRenderData()
 //================================================================================================================
 
 
-void SceneObject::initMaterial( const char* filename, const char* vp_entry, const char* fp_entry )
+void SceneObject::initMaterial( const char* shader_filename)
 {
 	if (mMaterial == nullptr)
 	{
-		mMaterial = new Material(GLApplication::loadShader(filename, vp_entry, fp_entry));
+		mMaterial = new Material(GLApplication::loadShader(shader_filename));
 
 		Material::setBrassMaterial(mMaterial);
 	}

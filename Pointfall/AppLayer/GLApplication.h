@@ -82,7 +82,7 @@ public:
 
 	void	addRenderTextData(const RenderTextDesc& pDesc);
 
-	static ks::SimpleShaderContainer* loadShader(const char* name, const char* vp_filename, const char* fp_filename);
+	static ks::SimpleShaderContainer* loadShader(const char* filename);
 
 
 

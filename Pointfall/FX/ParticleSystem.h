@@ -37,7 +37,7 @@ public:
 	ksU32 getUID() const								{ return mUID; }
 	
 
-	void initMaterial( const char* shadername, const char* vp_entry, const char* fp_entry );
+	void initMaterial(const char* shader_filename);
 
 	void step(float elapsed);
 

@@ -134,12 +134,8 @@ static ks::ShaderKey gShaderConstants[TOTAL_SHADER_CONSTANTS] =	// ordering need
 };
 
 
-const char	*gLitShaderFilename		= "__default",
-			*gBasicLitVertProgram	= "media\\programs\\basicLight_v.glsl",
-			*gBasicLitFragProgram	= "media\\programs\\basicLight_f.glsl",
-			*gUnlitShaderFilename	= "__unlit",
-			*gUnlitVertProgram		= "media\\programs\\basicUnlit_v.glsl",
-			*gUnlitFragProgram		= "media\\programs\\basicUnlit_f.glsl";
+const char	*gLitShaderFilename		= "media\\programs\\basicLit.glsl",
+			*gUnlitShaderFilename	= "media\\programs\\basicUnlit.glsl";
 
 //================================================================================================================
 
@@ -193,7 +189,7 @@ bool GLApplication::init(int argc, char** argv)
 	Service<ks::JobScheduler>::Register( mJobScheduler );
 
 	gFontMaterial.SetDiffuse(0, 0, 0);
-	gFontMaterial.ShaderContainer = loadShader(gUnlitShaderFilename, gUnlitVertProgram, gUnlitFragProgram);
+	gFontMaterial.ShaderContainer = loadShader(gUnlitShaderFilename);
 
 	//glutCreateMenu(menu);
 	//glutAddMenuEntry("[ ] Animate", ' ');
@@ -201,7 +197,7 @@ bool GLApplication::init(int argc, char** argv)
 
 	SceneObject* floor = new SceneObject();
 	{
-		floor->initMaterial(gUnlitShaderFilename, gUnlitVertProgram, gUnlitFragProgram);
+		floor->initMaterial(gUnlitShaderFilename);
 		floor->loadQuad(1.f);
 		Matrix rot(Matrix::IDENTITY), scale(Matrix::IDENTITY), trans;
 		rot.SetRotateX(DEG_TO_RAD(90.f));
@@ -215,7 +211,7 @@ bool GLApplication::init(int argc, char** argv)
 
 	SceneObject* venus = new SceneObject();
 	{
-		venus->initMaterial(gLitShaderFilename, gBasicLitVertProgram, gBasicLitFragProgram);
+		venus->initMaterial(gLitShaderFilename);
 		venus->loadModel("media//models//venusm.obj");
 		Matrix trans(Matrix::IDENTITY);
 		float scaling = 0.001f;
@@ -234,7 +230,7 @@ bool GLApplication::init(int argc, char** argv)
 
 	ParticleSystem* pSys = new ParticleSystem();
 	{
-		pSys->initMaterial(gUnlitShaderFilename, gUnlitVertProgram, gUnlitFragProgram);
+		pSys->initMaterial(gUnlitShaderFilename);
 
 		ks::ParticleController c;
 		c.SizeDurationRange		= vec4( 0.2f, 0.2f, 10.4f, 11.8f );
@@ -457,14 +453,11 @@ void GLApplication::render_callback()
 //================================================================================================================
 
 
-ks::SimpleShaderContainer* GLApplication::loadShader(const char* name, const char* vp_filename, const char* fp_filename)
+ks::SimpleShaderContainer* GLApplication::loadShader(const char* filename)
 {
-	ks::SimpleShaderContainer* shader = ks::RenderResourceFactory::findShader(name);
-	if (shader == nullptr)
+	ks::SimpleShaderContainer* shader = ks::RenderResourceFactory::findOrCreateShader(filename);
+	if (shader != nullptr)
 	{
-		shader = ks::RenderResourceFactory::findOrCreateShader(name);
-		shader->loadProgram(name, vp_filename, fp_filename);
-
 		for (int i = 0; i < TOTAL_SHADER_CONSTANTS; ++i)
 		{
 			shader->registerConstant(gShaderConstants[i]);
