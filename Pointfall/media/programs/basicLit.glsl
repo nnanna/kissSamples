@@ -5,8 +5,8 @@
 varying vec3 l_pos;
 varying vec3 l_nor;
 
-in vec3 in_pos;
-in vec3 in_nor;
+layout (location = 1) in vec3 in_pos;
+layout (location = 2) in vec3 in_nor;
 
 
 uniform mat4 modelViewProj;

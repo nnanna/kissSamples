@@ -1,7 +1,7 @@
 #version 330
 //#extension GL_EXT_gpu_shader4 : require
 
-in vec3 in_pos;
+layout (location = 1) in vec3 in_pos;
 
 uniform mat4 modelViewProj;
 uniform vec3 Kd = vec3( 1.0, 1.0, 1.0);
