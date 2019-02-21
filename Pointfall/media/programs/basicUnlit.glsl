@@ -1,4 +1,3 @@
-#version 330
 //#extension GL_EXT_gpu_shader4 : require
 
 layout (location = 1) in vec3 in_pos;
@@ -16,9 +15,10 @@ void main()
 
 
 #if FRAG_SHADER_ENABLED
+out vec4 outColor;
 void main()
 {
-	gl_FragColor = vec4(Kd, 1);
+	outColor = vec4(Kd, 1);
 	//gl_FragData[0] = vec4( position.xyz, 0.0);
 }
 #endif

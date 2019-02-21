@@ -1,4 +1,3 @@
-#version 330
 //#extension GL_EXT_gpu_shader4 : require
 
 //all these are in eye-space
@@ -32,6 +31,7 @@ void main()
 
 
 #if FRAG_SHADER_ENABLED
+out vec4 outColor;
 void main()
 {
 	vec3 P = l_pos;
@@ -58,8 +58,8 @@ void main()
 	}
 	vec3 specular = Ks * lightColor * specularLight;
 
-	gl_FragColor = vec4(emissive + ambient + diffuse + specular, 1);
-	//gl_FragColor = vec4(N.xyz, 1);
+	outColor = vec4(emissive + ambient + diffuse + specular, 1);
+	//outColor = vec4(N.xyz, 1);
 	//gl_FragData[0] = vec4( position.xyz, 0.0);
 }
 #endif
